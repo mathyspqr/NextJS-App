@@ -34,7 +34,7 @@ export default function Home() {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-8">
-      <h1 className="text-2xl font-bold mb-4">Messages du Serveur récupérés dans ma base de données</h1>
+      <h1 className="text-2xl font-bold mb-4">Messages du Serveur récupérés dans ma base de données ahahahah</h1>
       {error && <p className="text-red-500">{error}</p>}
       <ul className="list-disc">
         {messages.map((item) => (
