@@ -74,7 +74,7 @@ const Page = () => {
 
   const triggerConfetti = () => {
     setShowConfetti(true);
-    setTimeout(() => setShowConfetti(false), CONFETTI_DURATION); // Affiche les confettis pendant la durée définie
+    setTimeout(() => setShowConfetti(false), CONFETTI_DURATION);
   };
 
   return (
