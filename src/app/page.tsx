@@ -1,24 +1,35 @@
 'use client'
 
 import { useState, useEffect } from 'react';
-import { FaTrash } from 'react-icons/fa'; 
+import { FaTrash, FaHeart, FaRegHeart, FaArrowRight } from 'react-icons/fa'; 
 import Confetti from 'react-confetti';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
 const BASE_URL = 'https://express-back-end-phi.vercel.app';
-const CONFETTI_DURATION = 3000; // Durée des confettis et des toasts en millisecondes
+const CONFETTI_DURATION = 3000; 
 
 const Page = () => {
   interface Message {
     id: number;
-    message: string; 
+    message: string;
+    likes: number;
+    liked: boolean;
+  }
+
+  interface Commentaire {
+    id: number;
+    message_id: number;
+    commentaire: string;
   }
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [error, setError] = useState('');
   const [showConfetti, setShowConfetti] = useState(false);
+  const [commentingMessageId, setCommentingMessageId] = useState<number | null>(null);
+  const [newComment, setNewComment] = useState('');
+  const [commentaires, setCommentaires] = useState<Commentaire[]>([]);
 
   useEffect(() => {
     fetchMessages();
@@ -28,7 +39,17 @@ const Page = () => {
     try {
       const response = await fetch(`${BASE_URL}/mathys`);
       const data = await response.json();
-      setMessages(data);
+      setMessages(data.map((message: Message) => ({ ...message, liked: false }))); // Initialiser liked à false
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Une erreur inconnue est survenue');
+    }
+  };
+
+  const fetchCommentaires = async (messageId: number) => {
+    try {
+      const response = await fetch(`${BASE_URL}/messages/${messageId}/commentaires`);
+      const data = await response.json();
+      setCommentaires(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Une erreur inconnue est survenue');
     }
@@ -72,6 +93,53 @@ const Page = () => {
     }
   };
 
+  const handleLike = async (id: number) => {
+    const message = messages.find((message) => message.id === id);
+    if (!message) return;
+
+    try {
+      const response = await fetch(`${BASE_URL}/${message.liked ? 'unlike' : 'like'}-message/${id}`, {
+        method: 'POST',
+      });
+      if (!response.ok) {
+        throw new Error(`Erreur lors de l'${message.liked ? 'retrait du' : 'ajout du'} like`);
+      }
+      setMessages((prevMessages) =>
+        prevMessages.map((message) =>
+          message.id === id ? { ...message, likes: message.likes + (message.liked ? -1 : 1), liked: !message.liked } : message
+        )
+      );
+      toast.success(`❤️ Message ${message.liked ? 'unliké' : 'liké'} !`, { autoClose: CONFETTI_DURATION });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Une erreur inconnue est survenue');
+    }
+  };
+
+  const handleComment = (id: number) => {
+    setCommentingMessageId(commentingMessageId === id ? null : id);
+    if (commentingMessageId !== id) {
+      fetchCommentaires(id);
+    }
+  };
+
+  const handleCommentSubmit = async (e: React.FormEvent, id: number) => {
+    e.preventDefault();
+    try {
+      await fetch(`${BASE_URL}/messages/${id}/commentaires`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ commentaire: newComment }),
+      });
+      toast.info('💬 Commentaire ajouté !', { autoClose: CONFETTI_DURATION });
+      setNewComment('');
+      fetchCommentaires(id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Une erreur inconnue est survenue');
+    }
+  };
+
   const triggerConfetti = () => {
     setShowConfetti(true);
     setTimeout(() => setShowConfetti(false), CONFETTI_DURATION);
@@ -97,11 +165,43 @@ const Page = () => {
       </form>
       <ul className="list-disc w-full max-w-md">
         {messages.map((item) => (
-          <li key={item.id} className="mb-2 flex items-center justify-between bg-gray-200 p-2 rounded text-black">
-            {item.message}
-            <button onClick={() => handleDelete(item.id)} className="ml-2 text-red-500 hover:text-red-700 transition duration-300">
-              <FaTrash />
-            </button>
+          <li key={item.id} className="mb-2 flex flex-col bg-gray-200 p-2 rounded text-black">
+            <div className="flex items-center justify-between">
+              <span>{item.message}</span>
+              <div className="flex items-center">
+                <span className="mr-2">{item.likes} ❤️</span>
+                <button onClick={() => handleLike(item.id)} className="ml-2 text-red-500 hover:text-red-700 transition duration-300">
+                  {item.liked ? <FaHeart /> : <FaRegHeart />}
+                </button>
+                <button onClick={() => handleComment(item.id)} className="ml-2 text-blue-500 hover:text-blue-700 transition duration-300">
+                  <FaArrowRight />
+                </button>
+                <button onClick={() => handleDelete(item.id)} className="ml-2 text-red-500 hover:text-red-700 transition duration-300">
+                  <FaTrash />
+                </button>
+              </div>
+            </div>
+            {commentingMessageId === item.id && (
+              <div className="mt-2">
+                <ul className="list-disc pl-4">
+                  {commentaires.map((commentaire) => (
+                    <li key={commentaire.id} className="mb-1">{commentaire.commentaire}</li>
+                  ))}
+                </ul>
+                <form onSubmit={(e) => handleCommentSubmit(e, item.id)} className="mt-2">
+                  <input
+                    type="text"
+                    value={newComment}
+                    onChange={(e) => setNewComment(e.target.value)}
+                    className="border p-2 mb-2 w-full rounded"
+                    placeholder="✍️ Ajouter un commentaire"
+                  />
+                  <button type="submit" className="bg-green-500 text-white p-2 w-full rounded hover:bg-green-600 transition duration-300">
+                    Envoyer le commentaire
+                  </button>
+                </form>
+              </div>
+            )}
           </li>
         ))}
       </ul>
