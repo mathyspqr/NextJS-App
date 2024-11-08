@@ -6,13 +6,21 @@ import Confetti from 'react-confetti';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import LoginRegister from './LoginRegister';
-const [username, setUsername] = useState('');
-
 
 const BASE_URL = 'https://express-back-end-phi.vercel.app';
 const CONFETTI_DURATION = 3000; 
 
 const Page = () => {
+  const [username, setUsername] = useState('');
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [newMessage, setNewMessage] = useState('');
+  const [error, setError] = useState('');
+  const [showConfetti, setShowConfetti] = useState(false);
+  const [commentingMessageId, setCommentingMessageId] = useState<number | null>(null);
+  const [newComment, setNewComment] = useState('');
+  const [commentaires, setCommentaires] = useState<Commentaire[]>([]);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
   interface Message {
     id: number;
     message: string;
@@ -23,15 +31,6 @@ const Page = () => {
     message_id: number;
     commentaire: string;
   }
-
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [newMessage, setNewMessage] = useState('');
-  const [error, setError] = useState('');
-  const [showConfetti, setShowConfetti] = useState(false);
-  const [commentingMessageId, setCommentingMessageId] = useState<number | null>(null);
-  const [newComment, setNewComment] = useState('');
-  const [commentaires, setCommentaires] = useState<Commentaire[]>([]);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -140,7 +139,7 @@ const Page = () => {
   };
 
   if (!isAuthenticated) {
-    return <LoginRegister onLogin={() => setIsAuthenticated(true)} />;
+    return <LoginRegister onLogin={(username) => { setIsAuthenticated(true); setUsername(username); }} />;
   }
 
   return (
@@ -148,6 +147,7 @@ const Page = () => {
       {showConfetti && <Confetti />}
       <ToastContainer />
       <h1 className="text-3xl font-bold mb-4 text-center">🎉 Messages du Serveur récupérés dans ma base de données ! 🎉</h1>
+      <p className="text-xl mb-4">Connecté en tant que : {username}</p>
       {error && <p className="text-red-500">{error}</p>}
       <form onSubmit={handleSubmit} className="mb-4 w-full max-w-md">
         <input
