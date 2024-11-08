@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { FaTrash, FaArrowRight } from 'react-icons/fa'; 
+import { FaTrash, FaHeart, FaRegHeart, FaArrowRight } from 'react-icons/fa'; 
 import Confetti from 'react-confetti';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
@@ -37,7 +37,7 @@ const Page = () => {
     if (isAuthenticated) {
       fetchMessages();
     }
-  }, [isAuthenticated, fetchMessages]);
+  }, [isAuthenticated]);
 
   const fetchMessages = async () => {
     try {
@@ -140,7 +140,7 @@ const Page = () => {
   };
 
   if (!isAuthenticated) {
-    return <LoginRegister onLogin={(username: string, id: number) => { setIsAuthenticated(true); setUsername(username); setUserId(id); }} />;
+    return <LoginRegister onLogin={(username, id) => { setIsAuthenticated(true); setUsername(username); setUserId(id); }} />;
   }
 
   return (
