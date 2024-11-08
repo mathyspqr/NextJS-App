@@ -1,207 +1,72 @@
 'use client';
-
-import { useState, useEffect } from 'react';
-import { FaTrash, FaHeart, FaRegHeart, FaArrowRight } from 'react-icons/fa'; 
-import Confetti from 'react-confetti';
-import { ToastContainer, toast } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
-import LoginRegister from './LoginRegister';
+import React, { useState } from 'react';
+import axios from 'axios';
 
 const BASE_URL = 'https://express-back-end-phi.vercel.app';
-const CONFETTI_DURATION = 3000; 
 
-const Page = () => {
+const LoginRegister = ({ onLogin }: { onLogin: (username: string, id: number) => void }) => {
+  const [isLogin, setIsLogin] = useState(true);
   const [username, setUsername] = useState('');
-  const [userId, setUserId] = useState<number | null>(null);
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [newMessage, setNewMessage] = useState('');
-  const [error, setError] = useState('');
-  const [showConfetti, setShowConfetti] = useState(false);
-  const [commentingMessageId, setCommentingMessageId] = useState<number | null>(null);
-  const [newComment, setNewComment] = useState('');
-  const [commentaires, setCommentaires] = useState<Commentaire[]>([]);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-
-  interface Message {
-    id: number;
-    message: string;
-  }
-
-  interface Commentaire {
-    id: number;
-    message_id: number;
-    commentaire: string;
-  }
-
-  useEffect(() => {
-    if (isAuthenticated) {
-      fetchMessages();
-    }
-  }, [isAuthenticated]);
-
-  const fetchMessages = async () => {
-    try {
-      const response = await fetch(`${BASE_URL}/mathys`);
-      const data = await response.json();
-  
-      const messagesWithLikes = await Promise.all(
-        data.map(async (message: Message) => {
-          const likeResponse = await fetch(`${BASE_URL}/likes/${message.id}`, {
-            credentials: 'include',
-          });
-          const likeData = await likeResponse.json();
-          return { ...message, liked: likeData.length > 0, likes: likeData.length };
-        })
-      );
-  
-      setMessages(messagesWithLikes);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Une erreur inconnue est survenue');
-    }
-  };
-
-  const fetchCommentaires = async (messageId: number) => {
-    try {
-      const response = await fetch(`${BASE_URL}/messages/${messageId}/commentaires`);
-      const data = await response.json();
-      setCommentaires(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Une erreur inconnue est survenue');
-    }
-  };
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [message, setMessage] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const url = isLogin ? `${BASE_URL}/login` : `${BASE_URL}/register`;
+    const data = isLogin ? { username, password } : { username, email, password };
+    console.log('Sending data:', data); // Log data being sent
     try {
-      const response = await fetch(`${BASE_URL}/insert-message`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ message: newMessage }),
-      });
-      if (!response.ok) {
-        throw new Error('Erreur lors de l\'envoi du message');
+      const response = await axios.post(url, data);
+      console.log('Received response:', response.data); // Log response data
+      setMessage(response.data.message);
+      if (response.status === 200) {
+        onLogin(username, response.data.id); // Pass the user ID to onLogin
       }
-      setNewMessage("");
-      fetchMessages(); // Reload messages after successful submission
-      triggerConfetti();
-      toast.success('🎉 Message ajouté avec succès !', { autoClose: CONFETTI_DURATION });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Une erreur inconnue est survenue');
-    }
-  };
-
-  const handleDelete = async (id: number) => {
-    try {
-      const response = await fetch(`${BASE_URL}/delete-message/${id}`, {
-        method: 'DELETE',
-      });
-      if (!response.ok) {
-        throw new Error('Erreur lors de la suppression du message');
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response) {
+        setMessage(error.response.data.error);
+      } else {
+        setMessage('An unexpected error occurred');
       }
-      fetchMessages(); // Reload messages after successful deletion
-      triggerConfetti();
-      toast.success('🗑️ Message supprimé avec succès !', { autoClose: CONFETTI_DURATION });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Une erreur inconnue est survenue');
     }
   };
-
-
-  const handleComment = (id: number) => {
-    setCommentingMessageId(commentingMessageId === id ? null : id);
-    if (commentingMessageId !== id) {
-      fetchCommentaires(id);
-    }
-  };
-
-  const handleCommentSubmit = async (e: React.FormEvent, id: number) => {
-    e.preventDefault();
-    try {
-      await fetch(`${BASE_URL}/messages/${id}/commentaires`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ commentaire: newComment }),
-      });
-      toast.info('💬 Commentaire ajouté !', { autoClose: CONFETTI_DURATION });
-      setNewComment('');
-      fetchCommentaires(id);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Une erreur inconnue est survenue');
-    }
-  };
-
-  const triggerConfetti = () => {
-    setShowConfetti(true);
-    setTimeout(() => setShowConfetti(false), CONFETTI_DURATION);
-  };
-
-  if (!isAuthenticated) {
-    return <LoginRegister onLogin={(username, id) => { setIsAuthenticated(true); setUsername(username); setUserId(id); }} />;
-  }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-8 bg-white text-black">
-      {showConfetti && <Confetti />}
-      <ToastContainer />
-      <h1 className="text-3xl font-bold mb-4 text-center">🎉 Messages du Serveur récupérés dans ma base de données ! 🎉</h1>
-      <p className="text-xl mb-4">Connecté en tant que : {username} (ID: {userId})</p>
-      {error && <p className="text-red-500">{error}</p>}
-      <form onSubmit={handleSubmit} className="mb-4 w-full max-w-md">
+    <div>
+      <h2>{isLogin ? 'Login' : 'Register'}</h2>
+      <form onSubmit={handleSubmit}>
         <input
           type="text"
-          value={newMessage}
-          onChange={(e) => setNewMessage(e.target.value)}
-          className="border p-2 mb-2 w-full rounded"
-          placeholder="✍️ Nouveau message"
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
+          placeholder="Username"
+          required
         />
-        <button type="submit" className="bg-blue-500 text-white p-2 w-full rounded hover:bg-blue-600 transition duration-300">
-          Envoyer
-        </button>
+        {!isLogin && (
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="Email"
+            required
+          />
+        )}
+        <input
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder="Password"
+          required
+        />
+        <button type="submit">{isLogin ? 'Login' : 'Register'}</button>
       </form>
-      <ul className="list-disc w-full max-w-md">
-        {messages.map((item) => (
-          <li key={item.id} className="mb-2 flex flex-col bg-gray-200 p-2 rounded text-black">
-            <div className="flex items-center justify-between">
-              <span>{item.message}</span>
-              <div className="flex items-center">
-                <button onClick={() => handleComment(item.id)} className="ml-2 text-blue-500 hover:text-blue-700 transition duration-300">
-                  <FaArrowRight />
-                </button>
-                <button onClick={() => handleDelete(item.id)} className="ml-2 text-red-500 hover:text-red-700 transition duration-300">
-                  <FaTrash />
-                </button>
-              </div>
-            </div>
-            {commentingMessageId === item.id && (
-              <div className="mt-2">
-                <ul className="list-disc pl-4">
-                  {commentaires.map((commentaire) => (
-                    <li key={commentaire.id} className="mb-1">{commentaire.commentaire}</li>
-                  ))}
-                </ul>
-                <form onSubmit={(e) => handleCommentSubmit(e, item.id)} className="mt-2">
-                  <input
-                    type="text"
-                    value={newComment}
-                    onChange={(e) => setNewComment(e.target.value)}
-                    className="border p-2 mb-2 w-full rounded"
-                    placeholder="✍️ Ajouter un commentaire"
-                  />
-                  <button type="submit" className="bg-green-500 text-white p-2 w-full rounded hover:bg-green-600 transition duration-300">
-                    Envoyer le commentaire
-                  </button>
-                </form>
-              </div>
-            )}
-          </li>
-        ))}
-      </ul>
+      <p>{message}</p>
+      <button onClick={() => setIsLogin(!isLogin)}>
+        {isLogin ? 'Switch to Register' : 'Switch to Login'}
+      </button>
     </div>
   );
 };
 
-export default Page;
+export default LoginRegister;
