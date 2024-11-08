@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { FaTrash, FaHeart, FaRegHeart, FaArrowRight } from 'react-icons/fa'; 
+import { FaTrash, FaArrowRight } from 'react-icons/fa'; 
 import Confetti from 'react-confetti';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
@@ -58,6 +58,7 @@ const Page = () => {
       setError(err instanceof Error ? err.message : 'Une erreur inconnue est survenue');
     }
   };
+  
 
   const fetchCommentaires = async (messageId: number) => {
     try {
