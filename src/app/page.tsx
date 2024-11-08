@@ -37,7 +37,7 @@ const Page = () => {
     if (isAuthenticated) {
       fetchMessages();
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, fetchMessages]);
 
   const fetchMessages = async () => {
     try {
@@ -140,7 +140,7 @@ const Page = () => {
   };
 
   if (!isAuthenticated) {
-    return <LoginRegister onLogin={(username, id) => { setIsAuthenticated(true); setUsername(username); setUserId(id); }} />;
+    return <LoginRegister onLogin={(username: string, id: number) => { setIsAuthenticated(true); setUsername(username); setUserId(id); }} />;
   }
 
   return (
