@@ -1,20 +1,30 @@
-'use client'
+'use client';
 
 import { useState, useEffect } from 'react';
 import { FaTrash, FaHeart, FaRegHeart, FaArrowRight } from 'react-icons/fa'; 
 import Confetti from 'react-confetti';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+import LoginRegister from './LoginRegister';
 
 const BASE_URL = 'https://express-back-end-phi.vercel.app';
 const CONFETTI_DURATION = 3000; 
 
 const Page = () => {
+  const [username, setUsername] = useState('');
+  const [userId, setUserId] = useState<number | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [newMessage, setNewMessage] = useState('');
+  const [error, setError] = useState('');
+  const [showConfetti, setShowConfetti] = useState(false);
+  const [commentingMessageId, setCommentingMessageId] = useState<number | null>(null);
+  const [newComment, setNewComment] = useState('');
+  const [commentaires, setCommentaires] = useState<Commentaire[]>([]);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
   interface Message {
     id: number;
     message: string;
-    likes: number;
-    liked: boolean;
   }
 
   interface Commentaire {
@@ -23,23 +33,28 @@ const Page = () => {
     commentaire: string;
   }
 
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [newMessage, setNewMessage] = useState('');
-  const [error, setError] = useState('');
-  const [showConfetti, setShowConfetti] = useState(false);
-  const [commentingMessageId, setCommentingMessageId] = useState<number | null>(null);
-  const [newComment, setNewComment] = useState('');
-  const [commentaires, setCommentaires] = useState<Commentaire[]>([]);
-
   useEffect(() => {
-    fetchMessages();
-  }, []);
+    if (isAuthenticated) {
+      fetchMessages();
+    }
+  }, [isAuthenticated]);
 
   const fetchMessages = async () => {
     try {
       const response = await fetch(`${BASE_URL}/mathys`);
       const data = await response.json();
-      setMessages(data.map((message: Message) => ({ ...message, liked: false }))); // Initialiser liked à false
+  
+      const messagesWithLikes = await Promise.all(
+        data.map(async (message: Message) => {
+          const likeResponse = await fetch(`${BASE_URL}/likes/${message.id}`, {
+            credentials: 'include',
+          });
+          const likeData = await likeResponse.json();
+          return { ...message, liked: likeData.length > 0, likes: likeData.length };
+        })
+      );
+  
+      setMessages(messagesWithLikes);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Une erreur inconnue est survenue');
     }
@@ -93,27 +108,6 @@ const Page = () => {
     }
   };
 
-  const handleLike = async (id: number) => {
-    const message = messages.find((message) => message.id === id);
-    if (!message) return;
-
-    try {
-      const response = await fetch(`${BASE_URL}/${message.liked ? 'unlike' : 'like'}-message/${id}`, {
-        method: 'POST',
-      });
-      if (!response.ok) {
-        throw new Error(`Erreur lors de l'${message.liked ? 'retrait du' : 'ajout du'} like`);
-      }
-      setMessages((prevMessages) =>
-        prevMessages.map((message) =>
-          message.id === id ? { ...message, likes: message.likes + (message.liked ? -1 : 1), liked: !message.liked } : message
-        )
-      );
-      toast.success(`❤️ Message ${message.liked ? 'unliké' : 'liké'} !`, { autoClose: CONFETTI_DURATION });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Une erreur inconnue est survenue');
-    }
-  };
 
   const handleComment = (id: number) => {
     setCommentingMessageId(commentingMessageId === id ? null : id);
@@ -145,11 +139,16 @@ const Page = () => {
     setTimeout(() => setShowConfetti(false), CONFETTI_DURATION);
   };
 
+  if (!isAuthenticated) {
+    return <LoginRegister onLogin={(username, id) => { setIsAuthenticated(true); setUsername(username); setUserId(id); }} />;
+  }
+
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-8 bg-white text-black">
       {showConfetti && <Confetti />}
       <ToastContainer />
       <h1 className="text-3xl font-bold mb-4 text-center">🎉 Messages du Serveur récupérés dans ma base de données ! 🎉</h1>
+      <p className="text-xl mb-4">Connecté en tant que : {username} (ID: {userId})</p>
       {error && <p className="text-red-500">{error}</p>}
       <form onSubmit={handleSubmit} className="mb-4 w-full max-w-md">
         <input
@@ -169,10 +168,6 @@ const Page = () => {
             <div className="flex items-center justify-between">
               <span>{item.message}</span>
               <div className="flex items-center">
-                <span className="mr-2">{item.likes} ❤️</span>
-                <button onClick={() => handleLike(item.id)} className="ml-2 text-red-500 hover:text-red-700 transition duration-300">
-                  {item.liked ? <FaHeart /> : <FaRegHeart />}
-                </button>
                 <button onClick={() => handleComment(item.id)} className="ml-2 text-blue-500 hover:text-blue-700 transition duration-300">
                   <FaArrowRight />
                 </button>
