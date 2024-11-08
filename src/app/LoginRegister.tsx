@@ -27,21 +27,21 @@ const LoginRegister = ({ onLogin }: { onLogin: (username: string) => void }) => 
       if (axios.isAxiosError(error) && error.response) {
         setMessage(error.response.data.error);
       } else {
-        setMessage('An unexpected error occurred');
+        setMessage('Une erreur inattendue est survenue');
       }
     }
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-100">
-      <div className="bg-white p-8 rounded-lg shadow-md w-96">
-        <h2 className="text-2xl font-bold mb-6 text-center">{isLogin ? 'Login' : 'Register'}</h2>
+    <div className="flex items-center justify-center min-h-screen bg-gray-200">
+      <div className="bg-white p-8 rounded-lg shadow-md w-96 border border-gray-300">
+        <h2 className="text-2xl font-bold mb-6 text-center text-gray-800">{isLogin ? 'Connexion' : 'Inscription'}</h2>
         <form onSubmit={handleSubmit}>
           <div className="mb-4">
-            <label className="block text-gray-700">Username:</label>
+            <label className="block text-gray-700">Nom d'utilisateur :</label>
             <input
               type="text"
-              className="w-full px-3 py-2 border rounded-lg"
+              className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               required
@@ -49,10 +49,10 @@ const LoginRegister = ({ onLogin }: { onLogin: (username: string) => void }) => 
           </div>
           {!isLogin && (
             <div className="mb-4">
-              <label className="block text-gray-700">Email:</label>
+              <label className="block text-gray-700">Email :</label>
               <input
                 type="email"
-                className="w-full px-3 py-2 border rounded-lg"
+                className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -60,10 +60,10 @@ const LoginRegister = ({ onLogin }: { onLogin: (username: string) => void }) => 
             </div>
           )}
           <div className="mb-4">
-            <label className="block text-gray-700">Password:</label>
+            <label className="block text-gray-700">Mot de passe :</label>
             <input
               type="password"
-              className="w-full px-3 py-2 border rounded-lg"
+              className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
@@ -73,14 +73,14 @@ const LoginRegister = ({ onLogin }: { onLogin: (username: string) => void }) => 
             type="submit"
             className="w-full bg-blue-500 text-white py-2 rounded-lg hover:bg-blue-600 transition duration-200"
           >
-            {isLogin ? 'Login' : 'Register'}
+            {isLogin ? 'Connexion' : 'Inscription'}
           </button>
           <button
             type="button"
             className="w-full mt-4 bg-gray-500 text-white py-2 rounded-lg hover:bg-gray-600 transition duration-200"
             onClick={() => setIsLogin(!isLogin)}
           >
-            {isLogin ? 'Switch to Register' : 'Switch to Login'}
+            {isLogin ? 'Passer à l\'inscription' : 'Passer à la connexion'}
           </button>
         </form>
         {message && <p className="mt-4 text-red-500 text-center">{message}</p>}
