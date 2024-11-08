@@ -1,5 +1,5 @@
 'use client';
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import axios from 'axios';
 
 const BASE_URL = 'https://express-back-end-phi.vercel.app';
@@ -11,7 +11,7 @@ const LoginRegister = ({ onLogin }: { onLogin: (username: string) => void }) => 
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState('');
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     const url = isLogin ? `${BASE_URL}/login` : `${BASE_URL}/register`;
     const data = isLogin ? { username, password } : { username, email, password };
@@ -30,7 +30,7 @@ const LoginRegister = ({ onLogin }: { onLogin: (username: string) => void }) => 
         setMessage('Une erreur inattendue est survenue');
       }
     }
-  };
+  }, [isLogin, username, email, password, onLogin]);
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-200">
@@ -38,7 +38,7 @@ const LoginRegister = ({ onLogin }: { onLogin: (username: string) => void }) => 
         <h2 className="text-2xl font-bold mb-6 text-center text-gray-800">{isLogin ? 'Connexion' : 'Inscription'}</h2>
         <form onSubmit={handleSubmit}>
           <div className="mb-4">
-            <label className="block text-gray-700">Nom d'utilisateur :</label>
+            <label className="block text-gray-700">Nom d&apos;utilisateur :</label>
             <input
               type="text"
               className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
