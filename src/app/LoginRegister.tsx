@@ -80,7 +80,7 @@ const LoginRegister = ({ onLogin }: { onLogin: (username: string) => void }) => 
             className="w-full mt-4 bg-gray-500 text-white py-2 rounded-lg hover:bg-gray-600 transition duration-200"
             onClick={() => setIsLogin(!isLogin)}
           >
-            {isLogin ? 'Passer à l\'inscription' : 'Passer à la connexion'}
+            {isLogin ? 'Passer à l&apos;inscription' : 'Passer à la connexion'}
           </button>
         </form>
         {message && <p className="mt-4 text-red-500 text-center">{message}</p>}
