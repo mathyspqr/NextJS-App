@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { FaTrash, FaArrowRight } from 'react-icons/fa'; 
+import { FaTrash, FaHeart, FaRegHeart, FaArrowRight } from 'react-icons/fa'; 
 import Confetti from 'react-confetti';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
@@ -11,7 +11,7 @@ const BASE_URL = 'https://express-back-end-phi.vercel.app';
 const CONFETTI_DURATION = 3000; 
 
 const Page = () => {
-  const [username, setUsername] = useState('');
+  const [user, setUser] = useState<any>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [error, setError] = useState('');
@@ -24,6 +24,8 @@ const Page = () => {
   interface Message {
     id: number;
     message: string;
+    liked: boolean;
+    likes: number;
   }
 
   interface Commentaire {
@@ -43,22 +45,23 @@ const Page = () => {
       const response = await fetch(`${BASE_URL}/mathys`);
       const data = await response.json();
   
-      const messagesWithLikes = await Promise.all(
-        data.map(async (message: Message) => {
-          const likeResponse = await fetch(`${BASE_URL}/likes/${message.id}`, {
-            credentials: 'include',
-          });
-          const likeData = await likeResponse.json();
-          return { ...message, liked: likeData.length > 0, likes: likeData.length };
-        })
-      );
+      const likeResponse = await fetch(`${BASE_URL}/likes/${user.id}`, {
+        credentials: 'include',
+      });
+      const likeData = await likeResponse.json();
+      const likedMessageIds = likeData.map((like: { message_id: number }) => like.message_id);
+  
+      const messagesWithLikes = data.map((message: Message) => ({
+        ...message,
+        liked: likedMessageIds.includes(message.id),
+        likes: likedMessageIds.filter((id: number) => id === message.id).length,
+      }));
   
       setMessages(messagesWithLikes);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Une erreur inconnue est survenue');
     }
   };
-  
 
   const fetchCommentaires = async (messageId: number) => {
     try {
@@ -108,6 +111,21 @@ const Page = () => {
     }
   };
 
+  const handleLike = async (id: number, liked: boolean) => {
+    try {
+      const url = liked ? `${BASE_URL}/unlike-message/${user.id}/${id}` : `${BASE_URL}/like-message/${user.id}/${id}`;
+      const response = await fetch(url, {
+        method: 'POST',
+        credentials: 'include',
+      });
+      if (!response.ok) {
+        throw new Error(`Erreur lors de ${liked ? 'la suppression' : "l'ajout"} du like`);
+      }
+      fetchMessages(); // Reload messages after successful like/unlike
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Une erreur inconnue est survenue');
+    }
+  };
 
   const handleComment = (id: number) => {
     setCommentingMessageId(commentingMessageId === id ? null : id);
@@ -140,7 +158,7 @@ const Page = () => {
   };
 
   if (!isAuthenticated) {
-    return <LoginRegister onLogin={(username) => { setIsAuthenticated(true); setUsername(username); }} />;
+    return <LoginRegister onLogin={(user) => { setIsAuthenticated(true); setUser(user); }} />;
   }
 
   return (
@@ -148,7 +166,7 @@ const Page = () => {
       {showConfetti && <Confetti />}
       <ToastContainer />
       <h1 className="text-3xl font-bold mb-4 text-center">🎉 Messages du Serveur récupérés dans ma base de données ! 🎉</h1>
-      <p className="text-xl mb-4">Connecté en tant que : {username}</p>
+      <p className="text-xl mb-4">Connecté en tant que : {user.id}</p>
       {error && <p className="text-red-500">{error}</p>}
       <form onSubmit={handleSubmit} className="mb-4 w-full max-w-md">
         <input
@@ -168,6 +186,9 @@ const Page = () => {
             <div className="flex items-center justify-between">
               <span>{item.message}</span>
               <div className="flex items-center">
+                <button onClick={() => handleLike(item.id, item.liked)} className="ml-2 text-red-500 hover:text-red-700 transition duration-300">
+                  {item.liked ? <FaHeart /> : <FaRegHeart />}
+                </button>
                 <button onClick={() => handleComment(item.id)} className="ml-2 text-blue-500 hover:text-blue-700 transition duration-300">
                   <FaArrowRight />
                 </button>
