@@ -4,7 +4,16 @@ import axios from 'axios';
 
 const BASE_URL = 'https://express-back-end-phi.vercel.app';
 
-const LoginRegister = ({ onLogin }: { onLogin: (user: any) => void }) => {
+interface User {
+  id: number;
+  name: string;
+}
+
+interface LoginRegisterProps {
+  onLogin: (user: User) => void;
+}
+
+const LoginRegister: React.FC<LoginRegisterProps> = ({ onLogin }) => {
   const [isLogin, setIsLogin] = useState(true);
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
@@ -39,7 +48,7 @@ const LoginRegister = ({ onLogin }: { onLogin: (user: any) => void }) => {
         <h2 className="text-2xl font-bold mb-6 text-center text-gray-800">{isLogin ? 'Connexion' : 'Inscription'}</h2>
         <form onSubmit={handleSubmit}>
           <div className="mb-4">
-            <label className="block text-gray-700">Nom d'utilisateur :</label>
+            <label className="block text-gray-700">Nom utilisateur :</label>
             <input
               type="text"
               className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"

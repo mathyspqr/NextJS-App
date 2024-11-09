@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { FaTrash, FaHeart, FaRegHeart, FaArrowRight } from 'react-icons/fa'; 
 import Confetti from 'react-confetti';
 import { ToastContainer, toast } from 'react-toastify';
@@ -10,8 +10,26 @@ import LoginRegister from './LoginRegister';
 const BASE_URL = 'https://express-back-end-phi.vercel.app';
 const CONFETTI_DURATION = 3000; 
 
+interface User {
+  id: number;
+  name: string;
+}
+
+interface Message {
+  id: number;
+  message: string;
+  liked: boolean;
+  likes: number;
+}
+
+interface Commentaire {
+  id: number;
+  message_id: number;
+  commentaire: string;
+}
+
 const Page = () => {
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [error, setError] = useState('');
@@ -21,31 +39,12 @@ const Page = () => {
   const [commentaires, setCommentaires] = useState<Commentaire[]>([]);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
-  interface Message {
-    id: number;
-    message: string;
-    liked: boolean;
-    likes: number;
-  }
-
-  interface Commentaire {
-    id: number;
-    message_id: number;
-    commentaire: string;
-  }
-
-  useEffect(() => {
-    if (isAuthenticated) {
-      fetchMessages();
-    }
-  }, [isAuthenticated]);
-
-  const fetchMessages = async () => {
+  const fetchMessages = useCallback(async () => {
     try {
       const response = await fetch(`${BASE_URL}/mathys`);
       const data = await response.json();
   
-      const likeResponse = await fetch(`${BASE_URL}/likes/${user.id}`, {
+      const likeResponse = await fetch(`${BASE_URL}/likes/${user?.id}`, {
         credentials: 'include',
       });
       const likeData = await likeResponse.json();
@@ -61,7 +60,13 @@ const Page = () => {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Une erreur inconnue est survenue');
     }
-  };
+  }, [user]);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchMessages();
+    }
+  }, [isAuthenticated, fetchMessages]);
 
   const fetchCommentaires = async (messageId: number) => {
     try {
@@ -84,7 +89,7 @@ const Page = () => {
         body: JSON.stringify({ message: newMessage }),
       });
       if (!response.ok) {
-        throw new Error('Erreur lors de l\'envoi du message');
+        throw new Error('Erreur lors de l&apos;envoi du message');
       }
       setNewMessage("");
       fetchMessages(); // Reload messages after successful submission
@@ -113,13 +118,13 @@ const Page = () => {
 
   const handleLike = async (id: number, liked: boolean) => {
     try {
-      const url = liked ? `${BASE_URL}/unlike-message/${user.id}/${id}` : `${BASE_URL}/like-message/${user.id}/${id}`;
+      const url = liked ? `${BASE_URL}/unlike-message/${user?.id}/${id}` : `${BASE_URL}/like-message/${user?.id}/${id}`;
       const response = await fetch(url, {
         method: 'POST',
         credentials: 'include',
       });
       if (!response.ok) {
-        throw new Error(`Erreur lors de ${liked ? 'la suppression' : "l'ajout"} du like`);
+        throw new Error(`Erreur lors de ${liked ? 'la suppression' : "l&apos;ajout"} du like`);
       }
       fetchMessages(); // Reload messages after successful like/unlike
     } catch (err) {
@@ -166,7 +171,7 @@ const Page = () => {
       {showConfetti && <Confetti />}
       <ToastContainer />
       <h1 className="text-3xl font-bold mb-4 text-center">🎉 Messages du Serveur récupérés dans ma base de données ! 🎉</h1>
-      <p className="text-xl mb-4">Connecté en tant que : {user.id}</p>
+      <p className="text-xl mb-4">Connecté en tant que : {user?.id}</p>
       {error && <p className="text-red-500">{error}</p>}
       <form onSubmit={handleSubmit} className="mb-4 w-full max-w-md">
         <input
