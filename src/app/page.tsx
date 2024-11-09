@@ -213,7 +213,7 @@ const Page = () => {
                     placeholder="✍️ Ajouter un commentaire"
                   />
                   <button type="submit" className="bg-green-500 text-white p-2 w-full rounded hover:bg-green-600 transition duration-300">
-                    Envoyer le commentaire
+                    Envoyer le commentaire !
                   </button>
                 </form>
               </div>
