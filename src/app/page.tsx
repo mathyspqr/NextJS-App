@@ -110,14 +110,16 @@ const Page = () => {
     try {
       setError('');
       const auth = await getAuthHeader();
+      const { data } = await supabase.auth.getSession();
+      const token = data.session?.access_token;
 
-      const response = await fetch(`${BASE_URL}/insert-message`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...auth, // ✅ Bearer token
-        },
-        body: JSON.stringify({ message: newMessage }),
+      const response = await fetch('/api/insert-message', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${token}`, // 🔥 ICI
+  },
+  body: JSON.stringify({  message: newMessage  }),
       });
 
       if (!response.ok) {
