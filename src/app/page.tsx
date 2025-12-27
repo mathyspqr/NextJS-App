@@ -7,7 +7,7 @@ import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import LoginRegister from './LoginRegister';
 
-const BASE_URL = 'https://express-back-end-phi.vercel.app';
+const BASE_URL = 'https://express-back-end-phi.vercel.app/api/';
 const CONFETTI_DURATION = 3000; 
 
 interface User {
