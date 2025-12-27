@@ -32,10 +32,10 @@ interface Commentaire {
   commentaire: string;
 }
 
-async function getAuthHeader() {
+async function getAuthHeader(): Promise<{ Authorization?: string }> {
   const { data } = await supabase.auth.getSession();
   const token = data.session?.access_token;
-  return token ? { Authorization: `Bearer ${token}` } : {};
+  return token ? { Authorization: `Bearer ${token}` } : { Authorization: undefined };
 }
 
 const Page = () => {
