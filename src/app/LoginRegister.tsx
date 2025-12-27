@@ -49,7 +49,7 @@ const LoginRegister: React.FC<LoginRegisterProps> = ({ onLogin }) => {
         setMessage('Connexion réussie ✅');
       } else {
         // ✅ Register via Supabase
-        const { data, error } = await supabase.auth.signUp({
+        const { error } = await supabase.auth.signUp({
           email,
           password,
           options: {
@@ -62,8 +62,8 @@ const LoginRegister: React.FC<LoginRegisterProps> = ({ onLogin }) => {
         // Si "Confirm email" est ON dans Supabase, l'utilisateur devra confirmer son email avant login
         setMessage('Inscription réussie ✅');
       }
-    } catch (err: any) {
-      setMessage(err?.message ?? 'Une erreur inattendue est survenue');
+    } catch (err: unknown) {
+      setMessage((err as Error)?.message ?? 'Une erreur inattendue est survenue');
     }
   };
 
