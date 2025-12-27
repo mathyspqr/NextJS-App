@@ -11,7 +11,7 @@ const BASE_URL = 'https://express-back-end-phi.vercel.app';
 const CONFETTI_DURATION = 3000; 
 
 interface User {
-  id: number;
+  id: string;
   name: string;
 }
 
