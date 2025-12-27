@@ -7,7 +7,7 @@ import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
 import LoginRegister from './LoginRegister';
-import { createClient } from '../utils/supabase/client'; // ✅ adapte si ton chemin diffère
+import { createClient } from '../app/utils/supabase/client'; // ✅ adapte si ton chemin diffère
 
 const supabase = createClient();
 
