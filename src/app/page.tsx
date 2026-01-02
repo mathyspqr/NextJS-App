@@ -237,7 +237,7 @@ const Page = () => {
             likes: 0,
             username: username,
             user_color: userColor,
-            image_url: newMsg.image_url || null
+            image_url: newMsg.image_url || undefined
           }]);
         }
       )
