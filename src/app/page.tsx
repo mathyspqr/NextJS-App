@@ -239,7 +239,7 @@ const Page = () => {
             likes: 0,
             username: username,
             user_color: userColor,
-            image_url: newMsg.image_url ?? undefined
+            image_url: newMsg.image_url || null
           }]);
         }
       )
@@ -555,17 +555,9 @@ const Page = () => {
         },
       });
 
-      const responseText = await response.text();
-      
       if (!response.ok) {
-        toast.error(`❌ ${responseText}`, { autoClose: 3000 });
-        return;
-      }
-
-      // Vérifier si le backend a renvoyé un message d'erreur même avec status 200
-      if (responseText.toLowerCase().includes('erreur') || responseText.toLowerCase().includes('interdit') || responseText.toLowerCase().includes('propriétaire')) {
-        toast.error(`❌ ${responseText}`, { autoClose: 3000 });
-        return;
+        const txt = await response.text();
+        throw new Error(`Erreur lors de la suppression (${response.status}) : ${txt}`);
       }
 
       await fetchMessages();
