@@ -1,5 +1,5 @@
-const cors = require("cors");
-const { createClient } = require("@supabase/supabase-js");
+import cors from "cors";
+import { createClient } from "@supabase/supabase-js";
 
 const corsMiddleware = cors({
   origin: ["http://localhost:3000", "https://chatflow.mathysdev.com"],
@@ -45,7 +45,7 @@ function readJsonBody(req) {
   });
 }
 
-module.exports = async (req, res) => {
+export default async (req, res) => {
   corsMiddleware(req, res, async () => {
     try {
       // ✅ Normalise /api prefix (Vercel)

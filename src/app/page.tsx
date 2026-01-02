@@ -1870,12 +1870,6 @@ const Page = () => {
     }
   };
 
-  // ✅ Ouvrir la modale amis
-  const openFriendsModal = () => {
-    setShowFriendsModal(true);
-    loadFriends();
-  };
-
   // ✅ Charger les conversations
   const loadConversations = async () => {
     if (!user) return;
