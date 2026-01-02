@@ -61,6 +61,17 @@ body {
     }
   }
 
+  @keyframes scaleIn {
+    from {
+      opacity: 0;
+      transform: scale(0.9);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
   .animate-fade-in {
     animation: fadeIn 0.3s ease-out forwards;
   }
@@ -73,21 +84,82 @@ body {
     animation: slideUp 0.3s ease-out forwards;
   }
 
-  /* Scrollbar personnalisée */
+  .animate-scale-in {
+    animation: scaleIn 0.3s ease-out forwards;
+  }
+
+  /* Scrollbar personnalisée - Style moderne */
   ::-webkit-scrollbar {
-    width: 8px;
+    width: 6px;
+    height: 6px;
   }
 
   ::-webkit-scrollbar-track {
-    background: #f1f5f9;
+    background: transparent;
   }
 
   ::-webkit-scrollbar-thumb {
-    background: #3b82f6;
+    background: #cbd5e1;
     border-radius: 10px;
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    background: #2563eb;
+    background: #94a3b8;
+  }
+
+  /* Scrollbar pour les messages privés (violet) */
+  .scrollbar-purple::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .scrollbar-purple::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scrollbar-purple::-webkit-scrollbar-thumb {
+    background: #c4b5fd;
+    border-radius: 10px;
+  }
+
+  .scrollbar-purple::-webkit-scrollbar-thumb:hover {
+    background: #a78bfa;
+  }
+
+  /* Scrollbar fine et discrète */
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 4px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 10px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 0, 0, 0.3);
+  }
+
+  /* Cacher la scrollbar mais garder le scroll */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Firefox */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #cbd5e1 transparent;
+  }
+
+  .scrollbar-purple {
+    scrollbar-color: #c4b5fd transparent;
   }
 }
