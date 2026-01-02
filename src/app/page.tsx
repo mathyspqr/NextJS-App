@@ -557,14 +557,15 @@ const Page = () => {
 
       if (!response.ok) {
         const txt = await response.text();
-        throw new Error(`Erreur lors de la suppression (${response.status}) : ${txt}`);
+        toast.error(`❌ ${txt}`, { autoClose: 3000 });
+        return;
       }
 
       await fetchMessages();
       triggerConfetti();
       toast.success('🗑️ Message supprimé avec succès !', { autoClose: CONFETTI_DURATION });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Une erreur inconnue est survenue');
+      toast.error(err instanceof Error ? err.message : 'Une erreur inconnue est survenue', { autoClose: 3000 });
     }
   };
 
