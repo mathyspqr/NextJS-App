@@ -11,7 +11,9 @@ import { createClient } from '../app/utils/supabase/client';
 
 const supabase = createClient();
 
-const BASE_URL = 'http://localhost:3001';
+const BASE_URL = typeof window !== 'undefined' && window.location.hostname === 'localhost'
+  ? 'http://localhost:3001'
+  : 'https://express-back-end-phi.vercel.app/api';
 const CONFETTI_DURATION = 3000;
 
 interface User {
