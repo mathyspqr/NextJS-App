@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { FaTrash, FaHeart, FaRegHeart, FaArrowRight, FaUser, FaSignOutAlt, FaEnvelope, FaEdit, FaCheck, FaTimes, FaSmile, FaImage } from 'react-icons/fa';
+import { FaTrash, FaHeart, FaRegHeart, FaArrowRight, FaUser, FaSignOutAlt, FaEdit, FaCheck, FaTimes, FaSmile, FaImage } from 'react-icons/fa';
 import Confetti from 'react-confetti';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
@@ -147,7 +147,7 @@ const Page = () => {
 
       // Récupérer les couleurs des utilisateurs depuis profiles
       const messagesWithLikesAndColors = await Promise.all(
-        (Array.isArray(data) ? data : []).map(async (message: any) => {
+        (Array.isArray(data) ? data : []).map(async (message: Message & { user_id: string }) => {
           const { data: profile, error: profileError } = await supabase
             .from('profiles')
             .select('color')
@@ -198,7 +198,7 @@ const Page = () => {
         },
         async (payload) => {
           console.log('📨 Nouveau message reçu via Realtime:', payload);
-          const newMsg = payload.new as any;
+          const newMsg = payload.new as Message & { user_id: string };
           console.log('🔍 Données du nouveau message:', {
             id: newMsg.id,
             message: newMsg.message,
@@ -286,7 +286,7 @@ const Page = () => {
         async (payload) => {
           console.log('📨 Nouveau commentaire reçu via Realtime:', payload);
           console.log('📨 User actuel:', user.id, user.name);
-          const newComment = payload.new as any;
+          const newComment = payload.new as Commentaire & { user_id: string };
           
           // ✅ Récupérer le username et la couleur depuis la table profiles
           const { data: profile } = await supabase
@@ -441,7 +441,7 @@ const Page = () => {
       
       // Récupérer les couleurs des utilisateurs pour chaque commentaire
       const commentsWithColors = await Promise.all(
-        commentsData.map(async (comment: any) => {
+        commentsData.map(async (comment: Commentaire & { user_id: string }) => {
           const { data: profile, error: profileError } = await supabase
             .from('profiles')
             .select('color')
@@ -491,7 +491,7 @@ const Page = () => {
         
         console.log('📤 Upload de l\'image:', fileName);
         
-        const { data: uploadData, error: uploadError } = await supabase.storage
+        const { error: uploadError } = await supabase.storage
           .from('message-images')
           .upload(fileName, imageFile, {
             cacheControl: '3600',
@@ -734,7 +734,7 @@ const Page = () => {
       setIsUpdatingUsername(true);
       
       // ✅ Mise à jour du username dans auth.users (le trigger mettra à jour la table profile automatiquement)
-      const { data, error } = await supabase.auth.updateUser({
+      const { error } = await supabase.auth.updateUser({
         data: { username: editingUsername.trim() }
       });
 
@@ -891,7 +891,7 @@ const Page = () => {
                     <div className="flex items-start space-x-3">
                       <FaUser className="text-blue-500 mt-1 flex-shrink-0" />
                       <div className="flex-1">
-                        <p className="text-xs text-gray-500 mb-1">Nom d'utilisateur</p>
+                        <p className="text-xs text-gray-500 mb-1">Nom d&apos;utilisateur</p>
                         {!isEditingUsername ? (
                           <div className="flex items-center space-x-2 group">
                             <p className="text-sm font-medium text-gray-900">{user?.name}</p>
