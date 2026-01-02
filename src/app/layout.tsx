@@ -14,8 +14,8 @@ const geistMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "Mathys CORPORATION",
-  description: "Mathys CORPORATION App",
+  title: "ChatFlow",
+  description: "ChatFlow",
 };
 
 export default function RootLayout({
