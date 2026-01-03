@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import Image from 'next/image';
 import { FaTrash, FaHeart, FaRegHeart, FaArrowRight, FaUser, FaSignOutAlt, FaEdit, FaCheck, FaTimes, FaSmile, FaImage, FaCamera, FaUserFriends, FaUserPlus, FaUserCheck, FaBell, FaUserMinus, FaEnvelope, FaPaperPlane, FaChevronLeft, FaUsers } from 'react-icons/fa';
 import Confetti from 'react-confetti';
 import { ToastContainer, toast } from 'react-toastify';
@@ -212,14 +211,13 @@ const Page = () => {
         // Récupérer la couleur, avatar et bio depuis profiles
         const { data: profile } = await supabase
           .from('profiles')
-          .select('color, avatar_url, bio, last_seen')
+          .select('color, avatar_url, bio, last_seen') // Ajout de last_seen
           .eq('id', u.id)
           .single();
         
         const userColor = profile?.color || '#3B82F6';
         const userAvatar = profile?.avatar_url || null;
         const userBio = profile?.bio || '';
-        const userLastSeen = profile?.last_seen || null;
         
         setIsAuthenticated(true);
         setUser({
@@ -228,7 +226,7 @@ const Page = () => {
           color: userColor,
           avatar_url: userAvatar,
           bio: userBio,
-          last_seen: userLastSeen,
+          last_seen: profile?.last_seen || null, // Ajout de last_seen
         });
         setEditingColor(userColor);
         setEditingBio(userBio);
@@ -796,120 +794,6 @@ const Page = () => {
       supabase.removeChannel(onlineStatusChannel);
     };
   }, [isAuthenticated, user, activeConversationUser, viewingProfile]);
-
-  // ✅ Realtime - Changements de profil en temps réel
-  useEffect(() => {
-    if (!isAuthenticated || !user) return;
-
-    const profileChangesChannel = supabase
-      .channel('profile-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'profiles'
-        },
-        (payload) => {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const updated = payload.new as any;
-          const userId = updated.id;
-
-          // Ne pas traiter nos propres changements (déjà gérés localement)
-          if (userId === user.id) return;
-
-          const updatedProfile = {
-            id: updated.id,
-            username: updated.username,
-            color: updated.color,
-            avatar_url: updated.avatar_url,
-            bio: updated.bio,
-            last_seen: updated.last_seen
-          };
-
-          // Mettre à jour dans la liste des amis si présent
-          setFriends(prev => prev.map(friend =>
-            friend.id === userId
-              ? { ...friend, ...updatedProfile }
-              : friend
-          ));
-
-          // Mettre à jour dans les conversations si présent
-          setConversations(prev => prev.map(conv =>
-            conv.odId === userId
-              ? {
-                  ...conv,
-                  odUsername: updatedProfile.username,
-                  odColor: updatedProfile.color,
-                  odAvatar: updatedProfile.avatar_url,
-                  odLastSeen: updatedProfile.last_seen
-                }
-              : conv
-          ));
-
-          // Mettre à jour dans la conversation active
-          if (activeConversationUser && activeConversationUser.id === userId) {
-            setActiveConversationUser(prev => prev ? {
-              ...prev,
-              username: updatedProfile.username,
-              color: updatedProfile.color,
-              avatar_url: updatedProfile.avatar_url,
-              last_seen: updatedProfile.last_seen
-            } : null);
-          }
-
-          // Mettre à jour dans le profil affiché
-          if (viewingProfile && viewingProfile.id === userId) {
-            setViewingProfile(prev => prev ? { ...prev, ...updatedProfile } : null);
-          }
-
-          // Mettre à jour dans les messages publics
-          setMessages(prev => prev.map(msg =>
-            msg.user_id === userId
-              ? {
-                  ...msg,
-                  username: updatedProfile.username,
-                  user_color: updatedProfile.color,
-                  avatar_url: updatedProfile.avatar_url,
-                  last_seen: updatedProfile.last_seen
-                }
-              : msg
-          ));
-
-          // Mettre à jour dans les commentaires
-          setCommentairesByMessage(prev => {
-            const newCommentairesByMessage = { ...prev };
-            Object.keys(newCommentairesByMessage).forEach(messageId => {
-              newCommentairesByMessage[Number(messageId)] = newCommentairesByMessage[Number(messageId)].map(comment =>
-                comment.user_id === userId
-                  ? {
-                      ...comment,
-                      username: updatedProfile.username,
-                      user_color: updatedProfile.color,
-                      avatar_url: updatedProfile.avatar_url
-                    }
-                  : comment
-              );
-            });
-            return newCommentairesByMessage;
-          });
-
-          // Mettre à jour dans la liste des utilisateurs en ligne
-          setOnlineUsers(prev => prev.map(u =>
-            u.id === userId
-              ? { ...u, ...updatedProfile }
-              : u
-          ));
-
-          console.log('👤 Profil mis à jour en temps réel:', updatedProfile);
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(profileChangesChannel);
-    };
-  }, [isAuthenticated, user]);
 
   // ✅ Garder la ref à jour pour le Realtime
   useEffect(() => {
@@ -2209,6 +2093,12 @@ const Page = () => {
     }
   };
 
+  // ✅ Ouvrir la modale amis
+  const openFriendsModal = () => {
+    setShowFriendsModal(true);
+    loadFriends();
+  };
+
   // ✅ Charger les conversations
   const loadConversations = async () => {
     if (!user) return;
@@ -2430,7 +2320,6 @@ const Page = () => {
             unreadCount: 0
           }, ...prev];
         }
-        return prev;
       });
     } catch (err) {
       console.error('❌ Erreur envoi message privé:', err);
@@ -2556,6 +2445,9 @@ const Page = () => {
     });
   };
 
+  // Log pour vérifier la valeur de user?.last_seen
+  console.log('🔍 Header user.last_seen:', user);
+
   if (!isAuthenticated) {
     return (
       <LoginRegister
@@ -2584,14 +2476,11 @@ const Page = () => {
           >
             <FaTimes size={24} />
           </button>
-          <Image
-            src={lightboxImage}
-            alt="Image en grand"
-            width={800}
-            height={600}
+          <img 
+            src={lightboxImage} 
+            alt="Image en grand" 
             className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg shadow-2xl animate-scale-in"
             onClick={(e) => e.stopPropagation()}
-            unoptimized
           />
           <a
             href={lightboxImage}
@@ -2641,13 +2530,10 @@ const Page = () => {
                 <div className="flex justify-center -mt-12 relative z-10">
                   <div className="relative">
                     {viewingProfile.avatar_url ? (
-                      <Image
-                        src={viewingProfile.avatar_url}
+                      <img 
+                        src={viewingProfile.avatar_url} 
                         alt="Avatar"
-                        width={96}
-                        height={96}
                         className="w-24 h-24 rounded-full object-cover border-4 border-white shadow-lg"
-                        unoptimized
                       />
                     ) : (
                       <div 
@@ -2658,8 +2544,8 @@ const Page = () => {
                       </div>
                     )}
                     {viewingProfile.id !== user?.id && (
-                      <div className="absolute bottom-0 right-0">
-                        <OnlineStatusIndicator lastSeen={viewingProfile.last_seen} size="lg" showOfflineAsOrange={true} className="border-2 border-white" />
+                      <div className="absolute bottom-1 right-1">
+                        <OnlineStatusIndicator lastSeen={viewingProfile.last_seen} size="lg" showOfflineAsOrange={true} />
                       </div>
                     )}
                   </div>
@@ -2803,7 +2689,7 @@ const Page = () => {
               </h2>
               <button
                 onClick={() => setShowFriendsModal(false)}
-                className="text-white/80 hover:text-white transition-colors"
+                className="text-white hover:bg-white/20 p-2 rounded-lg transition-colors"
               >
                 <FaTimes size={20} />
               </button>
@@ -2828,7 +2714,7 @@ const Page = () => {
                           }}
                         >
                           {request.requester?.avatar_url ? (
-                            <Image src={request.requester.avatar_url} alt="" width={40} height={40} className="w-10 h-10 rounded-full object-cover" unoptimized />
+                            <img src={request.requester.avatar_url} alt="" className="w-10 h-10 rounded-full object-cover" />
                           ) : (
                             <div 
                               className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold"
@@ -2848,7 +2734,7 @@ const Page = () => {
                           </button>
                           <button
                             onClick={() => rejectFriendRequest(request.id)}
-                            className="p-2 bg-red-100 text-red-500 rounded-lg hover:bg-red-200 transition-colors"
+                            className="p-2 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition-colors"
                           >
                             <FaTimes size={12} />
                           </button>
@@ -2880,7 +2766,7 @@ const Page = () => {
                         <div className="flex items-center space-x-3">
                           <div className="relative">
                             {friend.avatar_url ? (
-                              <Image src={friend.avatar_url} alt="" width={48} height={48} className="w-12 h-12 rounded-full object-cover border-2" style={{ borderColor: friend.color }} unoptimized />
+                              <img src={friend.avatar_url} alt="" className="w-12 h-12 rounded-full object-cover border-2" style={{ borderColor: friend.color }} />
                             ) : (
                               <div 
                                 className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold"
@@ -2890,7 +2776,7 @@ const Page = () => {
                               </div>
                             )}
                             <div className="absolute bottom-0 right-0">
-                              <OnlineStatusIndicator lastSeen={friend.last_seen} size="md" showOfflineAsOrange={true} className="border-2 border-white" />
+                              <OnlineStatusIndicator lastSeen={friend.last_seen} size="md" showOfflineAsOrange={true} />
                             </div>
                           </div>
                           <div>
@@ -2917,7 +2803,7 @@ const Page = () => {
                             className="p-2 text-gray-400 hover:text-purple-500 hover:bg-purple-50 rounded-lg transition-colors"
                             title="Envoyer un message"
                           >
-                            <FaEnvelope size={14} />
+                            <FaEnvelope size={16} />
                           </button>
                           <button
                             onClick={(e) => {
@@ -2927,7 +2813,7 @@ const Page = () => {
                             className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
                             title="Retirer des amis"
                           >
-                            <FaUserMinus size={14} />
+                            <FaUserMinus size={16} />
                           </button>
                         </div>
                       </div>
@@ -2997,14 +2883,11 @@ const Page = () => {
                           {/* Avatar */}
                           <div className="relative">
                             {onlineUser.avatar_url ? (
-                              <Image
+                              <img
                                 src={onlineUser.avatar_url}
                                 alt={onlineUser.username}
-                                width={48}
-                                height={48}
                                 className="w-12 h-12 rounded-full object-cover border-2 group-hover:scale-110 transition-transform"
                                 style={{ borderColor: onlineUser.color || '#3B82F6' }}
-                                unoptimized
                               />
                             ) : (
                               <div
@@ -3094,24 +2977,21 @@ const Page = () => {
                     </button>
                     <div className="relative">
                       {activeConversationUser.avatar_url ? (
-                        <Image
-                          src={activeConversationUser.avatar_url}
-                          alt=""
-                          width={40}
-                          height={40}
+                        <img 
+                          src={activeConversationUser.avatar_url} 
+                          alt="" 
                           className="w-10 h-10 rounded-full object-cover border-2 border-white/30"
-                          unoptimized
                         />
                       ) : (
                         <div 
-                          className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold"
-                          style={{ backgroundColor: activeConversationUser.color }}
+                          className="w-10 h-10 rounded-full flex items-center justify-center text-white text-3xl font-bold border-2 border-white/30"
+                          style={{ backgroundColor: activeConversationUser.color || '#3B82F6' }}
                         >
-                          {activeConversationUser.username[0].toUpperCase()}
+                          {(activeConversationUser.username || 'U')[0].toUpperCase()}
                         </div>
                       )}
                       <div className="absolute bottom-0 right-0">
-                        <OnlineStatusIndicator lastSeen={activeConversationUser.last_seen} size="sm" showOfflineAsOrange={true} className="border-2 border-white" />
+                        <OnlineStatusIndicator lastSeen={activeConversationUser.last_seen} size="sm" showOfflineAsOrange={true} />
                       </div>
                     </div>
                     <span className="text-white font-semibold">{activeConversationUser.username}</span>
@@ -3146,10 +3026,10 @@ const Page = () => {
                       <div className="w-8 h-8 border-4 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
                     </div>
                   ) : privateMessages.length === 0 ? (
-                    <div className="text-center py-8 text-gray-500">
-                      <FaEnvelope className="mx-auto mb-3 text-gray-300" size={40} />
+                    <div className="text-center py-12 text-gray-500">
+                      <FaEnvelope className="mx-auto mb-3 text-gray-300" size={48} />
                       <p>Aucun message pour le moment</p>
-                      <p className="text-sm mt-1">Envoyez le premier message !</p>
+                      <p className="text-sm text-gray-400 mt-1">Envoyez le premier message !</p>
                     </div>
                   ) : (
                     privateMessages.map((msg) => (
@@ -3165,19 +3045,23 @@ const Page = () => {
                           } ${msg.image_url ? 'p-1' : 'px-4 py-2'}`}
                         >
                           {msg.image_url && (
-                            <Image
-                              src={msg.image_url}
-                              alt="Image"
-                              width={300}
-                              height={200}
+                            <img 
+                              src={msg.image_url} 
+                              alt="Image" 
                               className="rounded-xl max-w-full max-h-64 object-contain cursor-zoom-in hover:opacity-90 transition-opacity"
                               onClick={() => setLightboxImage(msg.image_url!)}
-                              unoptimized
                             />
                           )}
                           {msg.message && msg.message !== '📷 Image' && (
-                            <p className={`break-words ${msg.image_url ? 'px-3 py-1' : ''}`}>{msg.message}</p>
+                            <p className="text-gray-800 leading-relaxed mb-2">
+                              {msg.message}
+                              {msg.edited && (
+                                <span className="text-xs text-gray-500 ml-2">(modifié)</span>
+                              )}
+                            </p>
                           )}
+                          
+                          {/* Date et heure */}
                           <p className={`text-xs mt-1 ${msg.image_url ? 'px-3 pb-1' : ''} ${msg.sender_id === user?.id ? 'text-purple-200' : 'text-gray-400'}`}>
                             {new Date(msg.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
                           </p>
@@ -3205,13 +3089,10 @@ const Page = () => {
                 {privateImagePreview && (
                   <div className="px-4 py-2 border-t border-gray-100 bg-gray-50">
                     <div className="relative inline-block">
-                      <Image
-                        src={privateImagePreview}
-                        alt="Preview"
-                        width={80}
-                        height={80}
+                      <img 
+                        src={privateImagePreview} 
+                        alt="Preview" 
                         className="h-20 w-auto rounded-lg object-cover"
-                        unoptimized
                       />
                       <button
                         onClick={cancelPrivateImage}
@@ -3264,18 +3145,10 @@ const Page = () => {
                       className="flex-1 px-4 py-2 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100"
                     />
                     <button
-                      onClick={() => {
-                        stopPrivateTyping();
-                        sendPrivateMessage();
-                      }}
-                      disabled={(!newPrivateMessage.trim() && !privateImageFile) || sendingPrivateImage}
-                      className="p-3 bg-purple-500 text-white rounded-full hover:bg-purple-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      type="submit"
+                      className="flex-1 bg-purple-500 text-white py-3 px-6 rounded-lg hover:bg-purple-600 transition-all duration-200 font-medium shadow-md hover:shadow-lg"
                     >
-                      {sendingPrivateImage ? (
-                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                      ) : (
-                        <FaPaperPlane size={16} />
-                      )}
+                      Envoyer le message
                     </button>
                   </div>
                 </div>
@@ -3312,21 +3185,18 @@ const Page = () => {
                         >
                           <div className="relative">
                             {conv.odAvatar ? (
-                              <Image
-                                src={conv.odAvatar}
-                                alt=""
-                                width={48}
-                                height={48}
+                              <img 
+                                src={conv.odAvatar} 
+                                alt="" 
                                 className="w-12 h-12 rounded-full object-cover border-2"
                                 style={{ borderColor: conv.odColor }}
-                                unoptimized
                               />
                             ) : (
                               <div 
                                 className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold"
                                 style={{ backgroundColor: conv.odColor }}
                               >
-                                {conv.odUsername[0].toUpperCase()}
+                                {(conv.odUsername || 'U')[0].toUpperCase()}
                               </div>
                             )}
                             <div className="absolute bottom-0 right-0">
@@ -3393,29 +3263,23 @@ const Page = () => {
             <div className="relative" ref={userMenuRef}>
               <button
                 onClick={() => setShowUserMenu(!showUserMenu)}
-                className="relative flex items-center space-x-3 text-white px-4 py-2 rounded-lg hover:opacity-90 transition-all duration-200 shadow-md hover:shadow-lg"
+                className="flex items-center space-x-3 text-white px-4 py-2 rounded-lg hover:opacity-90 transition-all duration-200 shadow-md hover:shadow-lg"
                 style={{ backgroundColor: user?.color || '#3B82F6' }}
               >
                 {user?.avatar_url ? (
                   <div className="relative">
-                    <Image
-                      src={user.avatar_url}
+                    <img 
+                      src={user.avatar_url} 
                       alt="Avatar"
-                      width={32}
-                      height={32}
                       className="w-8 h-8 rounded-full object-cover border-2 border-white"
-                      unoptimized
                     />
                     <div className="absolute bottom-0 right-0">
-                      <OnlineStatusIndicator lastSeen={user?.last_seen} size="sm" className="border-2 border-white" />
+                      <OnlineStatusIndicator lastSeen={user?.last_seen} size="sm" showOfflineAsOrange={true} />
                     </div>
                   </div>
                 ) : (
-                  <div className="relative bg-white rounded-full p-2">
+                  <div className="bg-white rounded-full p-2">
                     <FaUser style={{ color: user?.color || '#3B82F6' }} size={16} />
-                    <div className="absolute bottom-0 right-0">
-                      <OnlineStatusIndicator lastSeen={user?.last_seen} size="sm" className="border-2 border-white" />
-                    </div>
                   </div>
                 )}
                 <span className="font-medium">{user?.name}</span>
@@ -3557,13 +3421,10 @@ const Page = () => {
                         <p className="text-xs text-gray-500 mb-2">Photo de profil</p>
                         <div className="flex items-center space-x-3">
                           {user?.avatar_url ? (
-                            <Image
-                              src={user.avatar_url}
+                            <img 
+                              src={user.avatar_url} 
                               alt="Avatar"
-                              width={48}
-                              height={48}
                               className="w-12 h-12 rounded-full object-cover border-2 border-gray-200"
-                              unoptimized
                             />
                           ) : (
                             <div 
@@ -3746,13 +3607,10 @@ const Page = () => {
               {/* Prévisualisation de l'image */}
               {imagePreview && (
                 <div className="mt-3 relative inline-block">
-                  <Image
-                    src={imagePreview}
-                    alt="Preview"
-                    width={200}
-                    height={150}
-                    className="max-w-xs max-h-48 rounded-lg border-2 border-gray-300"
-                    unoptimized
+                  <img 
+                    src={imagePreview} 
+                    alt="Preview" 
+                    className="h-20 w-auto rounded-lg object-cover"
                   />
                   <button
                     type="button"
@@ -3866,14 +3724,11 @@ const Page = () => {
                       >
                         <div className="relative">
                           {item.avatar_url ? (
-                            <Image
-                              src={item.avatar_url}
+                            <img 
+                              src={item.avatar_url} 
                               alt="Avatar"
-                              width={40}
-                              height={40}
                               className="w-10 h-10 rounded-full object-cover border-2 group-hover:scale-110 transition-transform"
                               style={{ borderColor: item.user_color || '#3B82F6' }}
-                              unoptimized
                             />
                           ) : (
                             <div 
@@ -3932,14 +3787,11 @@ const Page = () => {
                       {/* Image si présente */}
                       {item.image_url && (
                         <div className="mt-2">
-                          <Image
-                            src={item.image_url}
-                            alt="Message image"
-                            width={400}
-                            height={300}
+                          <img 
+                            src={item.image_url} 
+                            alt="Message image" 
                             className="max-w-md rounded-lg border border-gray-200 cursor-zoom-in hover:opacity-90 transition-opacity"
                             onClick={() => setLightboxImage(item.image_url!)}
-                            unoptimized
                           />
                         </div>
                       )}
@@ -4016,14 +3868,11 @@ const Page = () => {
                                   onClick={() => handleViewProfile(commentaire.user_id)}
                                 >
                                   {commentaire.avatar_url ? (
-                                    <Image
-                                      src={commentaire.avatar_url}
+                                    <img 
+                                      src={commentaire.avatar_url} 
                                       alt="Avatar"
-                                      width={28}
-                                      height={28}
                                       className="w-7 h-7 rounded-full object-cover border-2 group-hover:scale-110 transition-transform"
                                       style={{ borderColor: commentaire.user_color || '#10B981' }}
-                                      unoptimized
                                     />
                                   ) : (
                                     <div 

@@ -65,6 +65,9 @@ const OnlineStatusIndicator = ({
     ? 'En ligne (actif dans les 5 dernières minutes)' 
     : 'Hors ligne';
 
+  // Ajout d'un log pour diagnostiquer les valeurs de lastSeen et du statut
+  console.log('🟢 OnlineStatusIndicator:', { lastSeen, status });
+
   return (
     <div
       className={`${sizeClasses[size]} ${statusColor} rounded-full border-2 border-white ${className}`}
