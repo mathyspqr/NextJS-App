@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import Image from 'next/image';
 import { createClient } from '../app/utils/supabase/client';
 import { FaGoogle, FaEnvelope, FaLock, FaUser, FaEye, FaEyeSlash } from 'react-icons/fa';
 
@@ -103,9 +104,11 @@ const LoginRegister: React.FC<LoginRegisterProps> = ({ onLogin }) => {
         {/* Header */}
         <div className="text-center mb-8">
           <div className="flex justify-center mb-6">
-            <img 
-              src="/logo.png" 
-              alt="ChatFlow Logo" 
+            <Image
+              src="/logo.png"
+              alt="ChatFlow Logo"
+              width={160}
+              height={160}
               className="h-40 w-auto object-contain"
             />
           </div>

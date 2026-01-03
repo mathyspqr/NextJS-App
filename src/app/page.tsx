@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import Image from 'next/image';
 import { FaTrash, FaHeart, FaRegHeart, FaArrowRight, FaUser, FaSignOutAlt, FaEdit, FaCheck, FaTimes, FaSmile, FaImage, FaCamera, FaUserFriends, FaUserPlus, FaUserCheck, FaBell, FaUserMinus, FaEnvelope, FaPaperPlane, FaChevronLeft, FaUsers } from 'react-icons/fa';
 import Confetti from 'react-confetti';
 import { ToastContainer, toast } from 'react-toastify';
@@ -2208,12 +2209,6 @@ const Page = () => {
     }
   };
 
-  // ✅ Ouvrir la modale amis
-  const openFriendsModal = () => {
-    setShowFriendsModal(true);
-    loadFriends();
-  };
-
   // ✅ Charger les conversations
   const loadConversations = async () => {
     if (!user) return;
@@ -2589,11 +2584,14 @@ const Page = () => {
           >
             <FaTimes size={24} />
           </button>
-          <img 
-            src={lightboxImage} 
-            alt="Image en grand" 
+          <Image
+            src={lightboxImage}
+            alt="Image en grand"
+            width={800}
+            height={600}
             className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg shadow-2xl animate-scale-in"
             onClick={(e) => e.stopPropagation()}
+            unoptimized
           />
           <a
             href={lightboxImage}
@@ -2643,10 +2641,13 @@ const Page = () => {
                 <div className="flex justify-center -mt-12 relative z-10">
                   <div className="relative">
                     {viewingProfile.avatar_url ? (
-                      <img 
-                        src={viewingProfile.avatar_url} 
+                      <Image
+                        src={viewingProfile.avatar_url}
                         alt="Avatar"
+                        width={96}
+                        height={96}
                         className="w-24 h-24 rounded-full object-cover border-4 border-white shadow-lg"
+                        unoptimized
                       />
                     ) : (
                       <div 
@@ -2827,7 +2828,7 @@ const Page = () => {
                           }}
                         >
                           {request.requester?.avatar_url ? (
-                            <img src={request.requester.avatar_url} alt="" className="w-10 h-10 rounded-full object-cover" />
+                            <Image src={request.requester.avatar_url} alt="" width={40} height={40} className="w-10 h-10 rounded-full object-cover" unoptimized />
                           ) : (
                             <div 
                               className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold"
@@ -2879,7 +2880,7 @@ const Page = () => {
                         <div className="flex items-center space-x-3">
                           <div className="relative">
                             {friend.avatar_url ? (
-                              <img src={friend.avatar_url} alt="" className="w-12 h-12 rounded-full object-cover border-2" style={{ borderColor: friend.color }} />
+                              <Image src={friend.avatar_url} alt="" width={48} height={48} className="w-12 h-12 rounded-full object-cover border-2" style={{ borderColor: friend.color }} unoptimized />
                             ) : (
                               <div 
                                 className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold"
@@ -2996,11 +2997,14 @@ const Page = () => {
                           {/* Avatar */}
                           <div className="relative">
                             {onlineUser.avatar_url ? (
-                              <img
+                              <Image
                                 src={onlineUser.avatar_url}
                                 alt={onlineUser.username}
+                                width={48}
+                                height={48}
                                 className="w-12 h-12 rounded-full object-cover border-2 group-hover:scale-110 transition-transform"
                                 style={{ borderColor: onlineUser.color || '#3B82F6' }}
+                                unoptimized
                               />
                             ) : (
                               <div
@@ -3090,10 +3094,13 @@ const Page = () => {
                     </button>
                     <div className="relative">
                       {activeConversationUser.avatar_url ? (
-                        <img 
-                          src={activeConversationUser.avatar_url} 
-                          alt="" 
+                        <Image
+                          src={activeConversationUser.avatar_url}
+                          alt=""
+                          width={40}
+                          height={40}
                           className="w-10 h-10 rounded-full object-cover border-2 border-white/30"
+                          unoptimized
                         />
                       ) : (
                         <div 
@@ -3158,11 +3165,14 @@ const Page = () => {
                           } ${msg.image_url ? 'p-1' : 'px-4 py-2'}`}
                         >
                           {msg.image_url && (
-                            <img 
-                              src={msg.image_url} 
-                              alt="Image" 
+                            <Image
+                              src={msg.image_url}
+                              alt="Image"
+                              width={300}
+                              height={200}
                               className="rounded-xl max-w-full max-h-64 object-contain cursor-zoom-in hover:opacity-90 transition-opacity"
                               onClick={() => setLightboxImage(msg.image_url!)}
+                              unoptimized
                             />
                           )}
                           {msg.message && msg.message !== '📷 Image' && (
@@ -3195,10 +3205,13 @@ const Page = () => {
                 {privateImagePreview && (
                   <div className="px-4 py-2 border-t border-gray-100 bg-gray-50">
                     <div className="relative inline-block">
-                      <img 
-                        src={privateImagePreview} 
-                        alt="Preview" 
+                      <Image
+                        src={privateImagePreview}
+                        alt="Preview"
+                        width={80}
+                        height={80}
                         className="h-20 w-auto rounded-lg object-cover"
+                        unoptimized
                       />
                       <button
                         onClick={cancelPrivateImage}
@@ -3299,11 +3312,14 @@ const Page = () => {
                         >
                           <div className="relative">
                             {conv.odAvatar ? (
-                              <img 
-                                src={conv.odAvatar} 
-                                alt="" 
+                              <Image
+                                src={conv.odAvatar}
+                                alt=""
+                                width={48}
+                                height={48}
                                 className="w-12 h-12 rounded-full object-cover border-2"
                                 style={{ borderColor: conv.odColor }}
+                                unoptimized
                               />
                             ) : (
                               <div 
@@ -3382,10 +3398,13 @@ const Page = () => {
               >
                 {user?.avatar_url ? (
                   <div className="relative">
-                    <img 
-                      src={user.avatar_url} 
+                    <Image
+                      src={user.avatar_url}
                       alt="Avatar"
+                      width={32}
+                      height={32}
                       className="w-8 h-8 rounded-full object-cover border-2 border-white"
+                      unoptimized
                     />
                     <div className="absolute bottom-0 right-0">
                       <OnlineStatusIndicator lastSeen={user?.last_seen} size="sm" className="border-2 border-white" />
@@ -3538,10 +3557,13 @@ const Page = () => {
                         <p className="text-xs text-gray-500 mb-2">Photo de profil</p>
                         <div className="flex items-center space-x-3">
                           {user?.avatar_url ? (
-                            <img 
-                              src={user.avatar_url} 
+                            <Image
+                              src={user.avatar_url}
                               alt="Avatar"
+                              width={48}
+                              height={48}
                               className="w-12 h-12 rounded-full object-cover border-2 border-gray-200"
+                              unoptimized
                             />
                           ) : (
                             <div 
@@ -3724,10 +3746,13 @@ const Page = () => {
               {/* Prévisualisation de l'image */}
               {imagePreview && (
                 <div className="mt-3 relative inline-block">
-                  <img 
-                    src={imagePreview} 
-                    alt="Preview" 
+                  <Image
+                    src={imagePreview}
+                    alt="Preview"
+                    width={200}
+                    height={150}
                     className="max-w-xs max-h-48 rounded-lg border-2 border-gray-300"
+                    unoptimized
                   />
                   <button
                     type="button"
@@ -3841,11 +3866,14 @@ const Page = () => {
                       >
                         <div className="relative">
                           {item.avatar_url ? (
-                            <img 
-                              src={item.avatar_url} 
+                            <Image
+                              src={item.avatar_url}
                               alt="Avatar"
+                              width={40}
+                              height={40}
                               className="w-10 h-10 rounded-full object-cover border-2 group-hover:scale-110 transition-transform"
                               style={{ borderColor: item.user_color || '#3B82F6' }}
+                              unoptimized
                             />
                           ) : (
                             <div 
@@ -3904,11 +3932,14 @@ const Page = () => {
                       {/* Image si présente */}
                       {item.image_url && (
                         <div className="mt-2">
-                          <img 
-                            src={item.image_url} 
-                            alt="Message image" 
+                          <Image
+                            src={item.image_url}
+                            alt="Message image"
+                            width={400}
+                            height={300}
                             className="max-w-md rounded-lg border border-gray-200 cursor-zoom-in hover:opacity-90 transition-opacity"
                             onClick={() => setLightboxImage(item.image_url!)}
+                            unoptimized
                           />
                         </div>
                       )}
@@ -3985,11 +4016,14 @@ const Page = () => {
                                   onClick={() => handleViewProfile(commentaire.user_id)}
                                 >
                                   {commentaire.avatar_url ? (
-                                    <img 
-                                      src={commentaire.avatar_url} 
+                                    <Image
+                                      src={commentaire.avatar_url}
                                       alt="Avatar"
+                                      width={28}
+                                      height={28}
                                       className="w-7 h-7 rounded-full object-cover border-2 group-hover:scale-110 transition-transform"
                                       style={{ borderColor: commentaire.user_color || '#10B981' }}
+                                      unoptimized
                                     />
                                   ) : (
                                     <div 

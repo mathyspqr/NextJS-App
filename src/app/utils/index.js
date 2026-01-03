@@ -45,7 +45,7 @@ function readJsonBody(req) {
   });
 }
 
-export default async (req, res) => {
+export default async function handler(req, res) {
   corsMiddleware(req, res, async () => {
     try {
       // ✅ Normalise /api prefix (Vercel)
