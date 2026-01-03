@@ -10,7 +10,8 @@
 !.yarn/releases
 !.yarn/versions
 
-.md
+*.md
+*.sql
 
 # Tests
 /coverage

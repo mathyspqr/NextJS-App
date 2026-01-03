@@ -1,3 +1,11 @@
+/* Effet hover avatar identique à la liste des messages/conversations */
+.user-row:hover .avatar-hoverable,
+.user-row:focus-within .avatar-hoverable {
+  transform: scale(1.08);
+  box-shadow: 0 0 0 3px #a78bfa;
+  transition: transform 0.15s, box-shadow 0.15s;
+  z-index: 1;
+}
 @tailwind base;
 @tailwind components;
 @tailwind utilities;

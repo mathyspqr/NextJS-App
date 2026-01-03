@@ -1,13 +1,14 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { FaTrash, FaHeart, FaRegHeart, FaArrowRight, FaUser, FaSignOutAlt, FaEdit, FaCheck, FaTimes, FaSmile, FaImage, FaCamera, FaUserFriends, FaUserPlus, FaUserCheck, FaBell, FaUserMinus, FaEnvelope, FaPaperPlane, FaChevronLeft } from 'react-icons/fa';
+import { FaTrash, FaHeart, FaRegHeart, FaArrowRight, FaUser, FaSignOutAlt, FaEdit, FaCheck, FaTimes, FaSmile, FaImage, FaCamera, FaUserFriends, FaUserPlus, FaUserCheck, FaBell, FaUserMinus, FaEnvelope, FaPaperPlane, FaChevronLeft, FaUsers } from 'react-icons/fa';
 import Confetti from 'react-confetti';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
 import LoginRegister from './LoginRegister';
 import { createClient } from '../app/utils/supabase/client';
+import OnlineStatusIndicator from './components/UI/OnlineStatusIndicator';
 
 const supabase = createClient();
 
@@ -22,6 +23,7 @@ interface User {
   color?: string;
   avatar_url?: string;
   bio?: string;
+  last_seen?: string | null;
 }
 
 interface Message {
@@ -35,6 +37,7 @@ interface Message {
   avatar_url?: string;
   image_url?: string;
   edited?: boolean;
+  last_seen?: string | null;
 }
 
 interface Commentaire {
@@ -53,6 +56,8 @@ interface ProfileData {
   color: string;
   avatar_url: string | null;
   bio: string | null;
+  last_seen: string | null;
+  isFriend?: boolean;
 }
 
 interface FriendRequest {
@@ -79,6 +84,7 @@ interface Friend {
   color: string;
   avatar_url: string | null;
   bio: string | null;
+  last_seen: string | null;
 }
 
 interface PrivateMessage {
@@ -108,6 +114,7 @@ interface Conversation {
   odUsername: string;
   odColor: string;
   odAvatar: string | null;
+  odLastSeen: string | null;
   lastMessage: string;
   lastMessageTime: string;
   unreadCount: number;
@@ -158,9 +165,12 @@ const Page = () => {
   const [friendshipStatus, setFriendshipStatus] = useState<'none' | 'pending_sent' | 'pending_received' | 'accepted'>('none');
   const [sendingFriendRequest, setSendingFriendRequest] = useState(false);
   const [showMessagesModal, setShowMessagesModal] = useState(false);
+  const [showOnlineUsersModal, setShowOnlineUsersModal] = useState(false);
+  const [onlineUsers, setOnlineUsers] = useState<ProfileData[]>([]);
+  const [loadingOnlineUsers, setLoadingOnlineUsers] = useState(false);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversation, setActiveConversation] = useState<string | null>(null);
-  const [activeConversationUser, setActiveConversationUser] = useState<{id: string, username: string, color: string, avatar_url: string | null} | null>(null);
+  const [activeConversationUser, setActiveConversationUser] = useState<{id: string, username: string, color: string, avatar_url: string | null, last_seen?: string | null} | null>(null);
   const [privateMessages, setPrivateMessages] = useState<PrivateMessage[]>([]);
   const [newPrivateMessage, setNewPrivateMessage] = useState('');
   const [privateImagePreview, setPrivateImagePreview] = useState<string | null>(null);
@@ -190,6 +200,7 @@ const Page = () => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const typingBroadcastInterval = useRef<NodeJS.Timeout | null>(null);
   const typingRemovalTimeouts = useRef<Record<string, NodeJS.Timeout>>({});
+  const lastActivityUpdate = useRef<number>(0);
 
   // ✅ Restore session on refresh
   useEffect(() => {
@@ -200,13 +211,14 @@ const Page = () => {
         // Récupérer la couleur, avatar et bio depuis profiles
         const { data: profile } = await supabase
           .from('profiles')
-          .select('color, avatar_url, bio')
+          .select('color, avatar_url, bio, last_seen')
           .eq('id', u.id)
           .single();
         
         const userColor = profile?.color || '#3B82F6';
         const userAvatar = profile?.avatar_url || null;
         const userBio = profile?.bio || '';
+        const userLastSeen = profile?.last_seen || null;
         
         setIsAuthenticated(true);
         setUser({
@@ -215,6 +227,7 @@ const Page = () => {
           color: userColor,
           avatar_url: userAvatar,
           bio: userBio,
+          last_seen: userLastSeen,
         });
         setEditingColor(userColor);
         setEditingBio(userBio);
@@ -297,7 +310,7 @@ const Page = () => {
         (Array.isArray(data) ? data : []).map(async (message: Message & { user_id: string }) => {
           const { data: profile, error: profileError } = await supabase
             .from('profiles')
-            .select('color')
+            .select('color, last_seen')
             .eq('id', message.user_id)
             .single();
           
@@ -313,6 +326,7 @@ const Page = () => {
             liked: likedMessageIds.includes(message.id),
             likes: likedMessageIds.filter((id: number) => id === message.id).length,
             user_color: userColor,
+            last_seen: profile?.last_seen || null,
             edited: message.edited ?? false,
           };
         })
@@ -439,12 +453,9 @@ const Page = () => {
           setMessages(prev => prev.filter(msg => msg.id !== deletedId));
         }
       )
-      .subscribe((status) => {
-        console.log('📡 Canal messages status:', status);
-      });
+      .subscribe();
 
     return () => {
-      console.log('🔌 Déconnexion du canal messages');
       supabase.removeChannel(messagesChannel);
     };
   }, [isAuthenticated, user]);
@@ -453,7 +464,7 @@ const Page = () => {
   useEffect(() => {
     if (!isAuthenticated || !user) return;
 
-    console.log('🔧 Initialisation du canal commentaires pour user:', user.id, user.name);
+    // Initialisation du canal commentaires
 
     const commentChannel = supabase
       .channel('public-commentaires-channel', {
@@ -533,16 +544,9 @@ const Page = () => {
           });
         }
       )
-      .subscribe((status, err) => {
-        console.log('📡 Canal commentaires status:', status);
-        if (err) console.error('❌ Erreur canal commentaires:', err);
-        if (status === 'SUBSCRIBED') {
-          console.log('✅ Canal commentaires opérationnel, en attente d\'événements...');
-        }
-      });
+      .subscribe();
 
     return () => {
-      console.log('🔌 Déconnexion du canal commentaires');
       supabase.removeChannel(commentChannel);
     };
   }, [isAuthenticated, user]);
@@ -590,12 +594,9 @@ const Page = () => {
           });
         }
       })
-      .subscribe((status) => {
-        console.log('📡 Canal typing status:', status);
-      });
+      .subscribe();
 
     return () => {
-      console.log('🔌 Déconnexion du canal typing');
       supabase.removeChannel(typingChannel);
     };
   }, [isAuthenticated, user]);
@@ -604,7 +605,7 @@ const Page = () => {
   useEffect(() => {
     if (!isAuthenticated || !user) return;
 
-    console.log('🔧 Initialisation du canal friendships pour user:', user.id);
+    // Initialisation du canal friendships
 
     const friendshipsChannel = supabase
       .channel('friendships-channel')
@@ -700,13 +701,212 @@ const Page = () => {
           ));
         }
       )
-      .subscribe((status) => {
-        console.log('📡 Canal friendships status:', status);
-      });
+      .subscribe();
 
     return () => {
-      console.log('🔌 Déconnexion du canal friendships');
       supabase.removeChannel(friendshipsChannel);
+    };
+  }, [isAuthenticated, user]);
+
+  // ✅ Realtime - Statut en ligne (last_seen) en temps réel
+  useEffect(() => {
+    if (!isAuthenticated || !user) return;
+
+    // Initialisation du canal online-status
+
+    const onlineStatusChannel = supabase
+      .channel('online-status-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'profiles',
+          filter: `id=neq.${user.id}` // Exclure nos propres mises à jour
+        },
+        (payload) => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const updated = payload.new as any;
+          const userId = updated.id;
+          const newLastSeen = updated.last_seen;
+
+          // Mettre à jour dans la liste des amis si présent
+          setFriends(prev => prev.map(friend => 
+            friend.id === userId 
+              ? { ...friend, last_seen: newLastSeen }
+              : friend
+          ));
+
+          // Mettre à jour dans les conversations si présent
+          setConversations(prev => prev.map(conv => 
+            conv.odId === userId 
+              ? { ...conv, odLastSeen: newLastSeen }
+              : conv
+          ));
+
+          // Mettre à jour dans la conversation active
+          if (activeConversationUser && activeConversationUser.id === userId) {
+            setActiveConversationUser(prev => prev ? { ...prev, last_seen: newLastSeen } : null);
+          }
+
+          // Mettre à jour dans le profil affiché
+          if (viewingProfile && viewingProfile.id === userId) {
+            setViewingProfile(prev => prev ? { ...prev, last_seen: newLastSeen } : null);
+          }
+
+          // Mettre à jour dans les messages publics
+          setMessages(prev => prev.map(msg => 
+            msg.user_id === userId 
+              ? { ...msg, last_seen: newLastSeen }
+              : msg
+          ));
+
+          // Mettre à jour dans la liste des utilisateurs en ligne
+          setOnlineUsers(prev => {
+            const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
+            const lastSeenTime = new Date(newLastSeen).getTime();
+            const isOnline = lastSeenTime >= fiveMinutesAgo;
+            
+            // Si l'utilisateur est déjà dans la liste
+            const existingIndex = prev.findIndex(u => u.id === userId);
+            
+            if (existingIndex >= 0) {
+              if (isOnline) {
+                // Mettre à jour last_seen
+                return prev.map(u => u.id === userId ? { ...u, last_seen: newLastSeen } : u);
+              } else {
+                // Retirer de la liste (plus en ligne)
+                return prev.filter(u => u.id !== userId);
+              }
+            } else if (isOnline) {
+              // Ajouter à la liste (nouvel utilisateur en ligne)
+              // On recharge la liste pour avoir toutes les infos
+              loadOnlineUsers();
+              return prev;
+            }
+            
+            return prev;
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(onlineStatusChannel);
+    };
+  }, [isAuthenticated, user, activeConversationUser, viewingProfile]);
+
+  // ✅ Realtime - Changements de profil en temps réel
+  useEffect(() => {
+    if (!isAuthenticated || !user) return;
+
+    const profileChangesChannel = supabase
+      .channel('profile-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'profiles'
+        },
+        (payload) => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const updated = payload.new as any;
+          const userId = updated.id;
+
+          // Ne pas traiter nos propres changements (déjà gérés localement)
+          if (userId === user.id) return;
+
+          const updatedProfile = {
+            id: updated.id,
+            username: updated.username,
+            color: updated.color,
+            avatar_url: updated.avatar_url,
+            bio: updated.bio,
+            last_seen: updated.last_seen
+          };
+
+          // Mettre à jour dans la liste des amis si présent
+          setFriends(prev => prev.map(friend =>
+            friend.id === userId
+              ? { ...friend, ...updatedProfile }
+              : friend
+          ));
+
+          // Mettre à jour dans les conversations si présent
+          setConversations(prev => prev.map(conv =>
+            conv.odId === userId
+              ? {
+                  ...conv,
+                  odUsername: updatedProfile.username,
+                  odColor: updatedProfile.color,
+                  odAvatar: updatedProfile.avatar_url,
+                  odLastSeen: updatedProfile.last_seen
+                }
+              : conv
+          ));
+
+          // Mettre à jour dans la conversation active
+          if (activeConversationUser && activeConversationUser.id === userId) {
+            setActiveConversationUser(prev => prev ? {
+              ...prev,
+              username: updatedProfile.username,
+              color: updatedProfile.color,
+              avatar_url: updatedProfile.avatar_url,
+              last_seen: updatedProfile.last_seen
+            } : null);
+          }
+
+          // Mettre à jour dans le profil affiché
+          if (viewingProfile && viewingProfile.id === userId) {
+            setViewingProfile(prev => prev ? { ...prev, ...updatedProfile } : null);
+          }
+
+          // Mettre à jour dans les messages publics
+          setMessages(prev => prev.map(msg =>
+            msg.user_id === userId
+              ? {
+                  ...msg,
+                  username: updatedProfile.username,
+                  user_color: updatedProfile.color,
+                  avatar_url: updatedProfile.avatar_url,
+                  last_seen: updatedProfile.last_seen
+                }
+              : msg
+          ));
+
+          // Mettre à jour dans les commentaires
+          setCommentairesByMessage(prev => {
+            const newCommentairesByMessage = { ...prev };
+            Object.keys(newCommentairesByMessage).forEach(messageId => {
+              newCommentairesByMessage[Number(messageId)] = newCommentairesByMessage[Number(messageId)].map(comment =>
+                comment.user_id === userId
+                  ? {
+                      ...comment,
+                      username: updatedProfile.username,
+                      user_color: updatedProfile.color,
+                      avatar_url: updatedProfile.avatar_url
+                    }
+                  : comment
+              );
+            });
+            return newCommentairesByMessage;
+          });
+
+          // Mettre à jour dans la liste des utilisateurs en ligne
+          setOnlineUsers(prev => prev.map(u =>
+            u.id === userId
+              ? { ...u, ...updatedProfile }
+              : u
+          ));
+
+          console.log('👤 Profil mis à jour en temps réel:', updatedProfile);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(profileChangesChannel);
     };
   }, [isAuthenticated, user]);
 
@@ -719,7 +919,7 @@ const Page = () => {
   useEffect(() => {
     if (!isAuthenticated || !user) return;
 
-    console.log('📡 Configuration du canal private_messages pour user:', user.id);
+    // Configuration du canal private_messages
 
     const privateMessagesChannel = supabase
       .channel(`private-messages-${user.id}`)
@@ -746,7 +946,7 @@ const Page = () => {
           // Récupérer le profil de l'expéditeur
           const { data: senderProfile } = await supabase
             .from('profiles')
-            .select('id, username, color, avatar_url')
+            .select('id, username, color, avatar_url, last_seen')
             .eq('id', newMessage.sender_id)
             .single();
 
@@ -779,7 +979,8 @@ const Page = () => {
                     id: senderProfile.id,
                     username: senderProfile.username,
                     color: senderProfile.color || '#3B82F6',
-                    avatar_url: senderProfile.avatar_url
+                    avatar_url: senderProfile.avatar_url,
+                    last_seen: senderProfile.last_seen || null
                   });
                 }
               }
@@ -806,6 +1007,7 @@ const Page = () => {
                 odUsername: senderProfile.username,
                 odColor: senderProfile.color || '#3B82F6',
                 odAvatar: senderProfile.avatar_url,
+                odLastSeen: null,
                 lastMessage: lastMsg,
                 lastMessageTime: newMessage.created_at,
                 unreadCount: 1
@@ -815,13 +1017,9 @@ const Page = () => {
           });
         }
       )
-      .subscribe((status, err) => {
-        console.log('📡 Canal private_messages status:', status);
-        if (err) console.error('❌ Erreur canal:', err);
-      });
+      .subscribe();
 
     return () => {
-      console.log('🔌 Déconnexion du canal private_messages');
       supabase.removeChannel(privateMessagesChannel);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -891,9 +1089,7 @@ const Page = () => {
           setPrivateTypingUser(null);
         }
       })
-      .subscribe((status) => {
-        console.log('📡 Canal private_typing status:', status);
-      });
+      .subscribe();
 
     return () => {
       supabase.removeChannel(privateTypingChannel);
@@ -1353,6 +1549,101 @@ const Page = () => {
     setTimeout(() => setShowConfetti(false), CONFETTI_DURATION);
   };
 
+  // ✅ Mise à jour du statut en ligne
+  const updateOnlineStatus = async () => {
+    if (!user) return;
+    
+    const now = new Date().toISOString();
+    console.log('📝 Mise à jour last_seen:', now);
+    
+    try {
+      await supabase
+        .from('profiles')
+        .update({ last_seen: now })
+        .eq('id', user.id);
+      
+      console.log('✅ last_seen mis à jour dans la DB');
+      
+      // Mettre à jour localement partout où l'utilisateur actuel peut apparaître
+      // Dans les messages publics
+      setMessages(prev => prev.map(msg => 
+        msg.user_id === user.id 
+          ? { ...msg, last_seen: now }
+          : msg
+      ));
+      
+      // Dans le profil visionné (si on regarde son propre profil)
+      if (viewingProfile && viewingProfile.id === user.id) {
+        setViewingProfile(prev => prev ? { ...prev, last_seen: now } : null);
+      }
+      
+      console.log('✅ État local mis à jour pour user actuel');
+      
+      lastActivityUpdate.current = Date.now();
+    } catch (err) {
+      console.error('❌ Erreur mise à jour last_seen:', err);
+    }
+  };
+
+  // ✅ Mise à jour lors de l'activité utilisateur (throttled à 30 secondes)
+  const handleUserActivity = useCallback(() => {
+    if (!user) return;
+    
+    const now = Date.now();
+    const timeSinceLastUpdate = now - lastActivityUpdate.current;
+    
+    // Ne mettre à jour que si 30 secondes se sont écoulées
+    if (timeSinceLastUpdate >= 30000) {
+      console.log('🖱️ Activité détectée - Mise à jour du statut');
+      updateOnlineStatus();
+    }
+  }, [user]);
+
+  // ✅ Mise à jour initiale au montage (arrivée sur le site)
+  useEffect(() => {
+    if (!user) return;
+
+    // Mise à jour immédiate au montage pour signaler qu'on est en ligne
+    console.log('🟢 Arrivée sur le site - Passage en ligne');
+    updateOnlineStatus();
+    
+    // Charger la liste des utilisateurs en ligne au démarrage
+    loadOnlineUsers();
+
+    // Recharger la liste toutes les 30 secondes pour détecter les utilisateurs qui passent offline
+    const interval = setInterval(() => {
+      loadOnlineUsers();
+    }, 30 * 1000);
+
+    // Beacon de déconnexion
+    const handleBeforeUnload = () => {
+      if (navigator.sendBeacon) {
+        navigator.sendBeacon(`/api/update-last-seen?userId=${user.id}`);
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [user]);
+
+  // ✅ Event listeners pour l'activité utilisateur (clics et mouvements)
+  useEffect(() => {
+    if (!user) return;
+
+    window.addEventListener('click', handleUserActivity);
+    window.addEventListener('mousemove', handleUserActivity);
+    window.addEventListener('keydown', handleUserActivity);
+
+    return () => {
+      window.removeEventListener('click', handleUserActivity);
+      window.removeEventListener('mousemove', handleUserActivity);
+      window.removeEventListener('keydown', handleUserActivity);
+    };
+  }, [user, handleUserActivity]);
+
   const handleLogout = async () => {
     closeUserMenu();
     await supabase.auth.signOut();
@@ -1661,7 +1952,7 @@ const Page = () => {
     try {
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, username, color, avatar_url, bio')
+        .select('id, username, color, avatar_url, bio, last_seen')
         .eq('id', userId)
         .single();
 
@@ -1717,8 +2008,8 @@ const Page = () => {
           id,
           requester_id,
           addressee_id,
-          requester:profiles!friendships_requester_id_fkey(id, username, color, avatar_url, bio),
-          addressee:profiles!friendships_addressee_id_fkey(id, username, color, avatar_url, bio)
+          requester:profiles!friendships_requester_id_fkey(id, username, color, avatar_url, bio, last_seen),
+          addressee:profiles!friendships_addressee_id_fkey(id, username, color, avatar_url, bio, last_seen)
         `)
         .eq('status', 'accepted')
         .or(`requester_id.eq.${user.id},addressee_id.eq.${user.id}`);
@@ -1736,6 +2027,7 @@ const Page = () => {
           color: profile?.color || '#3B82F6',
           avatar_url: profile?.avatar_url || null,
           bio: profile?.bio || null,
+          last_seen: profile?.last_seen || null,
         };
       });
 
@@ -1773,6 +2065,52 @@ const Page = () => {
       toast.error('Erreur lors du chargement des amis');
     } finally {
       setLoadingFriends(false);
+    }
+  };
+
+  // ✅ Charger les utilisateurs en ligne
+  const loadOnlineUsers = async () => {
+    if (!user) return;
+    setLoadingOnlineUsers(true);
+
+    try {
+      // Récupérer tous les utilisateurs en ligne (actifs dans les 5 dernières minutes)
+      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+      
+      // Récupérer les IDs de tous les amis
+      const { data: friendships } = await supabase
+        .from('friendships')
+        .select('requester_id, addressee_id, status')
+        .or(`requester_id.eq.${user.id},addressee_id.eq.${user.id}`)
+        .eq('status', 'accepted');
+      
+      // Créer un Set des IDs d'amis
+      const friendIds = new Set<string>();
+      friendships?.forEach(f => {
+        friendIds.add(f.requester_id === user.id ? f.addressee_id : f.requester_id);
+      });
+      
+      // Récupérer tous les utilisateurs en ligne sauf soi-même
+      const { data: users, error } = await supabase
+        .from('profiles')
+        .select('id, username, color, avatar_url, bio, last_seen')
+        .gte('last_seen', fiveMinutesAgo)
+        .neq('id', user.id);
+
+      if (error) throw error;
+
+      // Ajouter l'info si c'est un ami
+      const usersWithFriendStatus = (users || []).map(u => ({
+        ...u,
+        isFriend: friendIds.has(u.id)
+      }));
+
+      setOnlineUsers(usersWithFriendStatus);
+    } catch (err) {
+      console.error('❌ Erreur chargement utilisateurs en ligne:', err);
+      toast.error('Erreur lors du chargement des utilisateurs');
+    } finally {
+      setLoadingOnlineUsers(false);
     }
   };
 
@@ -1870,6 +2208,12 @@ const Page = () => {
     }
   };
 
+  // ✅ Ouvrir la modale amis
+  const openFriendsModal = () => {
+    setShowFriendsModal(true);
+    loadFriends();
+  };
+
   // ✅ Charger les conversations
   const loadConversations = async () => {
     if (!user) return;
@@ -1908,7 +2252,7 @@ const Page = () => {
       // Charger les profils de ces utilisateurs
       const { data: profiles } = await supabase
         .from('profiles')
-        .select('id, username, color, avatar_url')
+        .select('id, username, color, avatar_url, last_seen')
         .in('id', Array.from(otherUserIds));
 
       const profileMap = new Map(profiles?.map(p => [p.id, p]) || []);
@@ -1932,6 +2276,7 @@ const Page = () => {
             odUsername: otherUserProfile.username,
             odColor: otherUserProfile.color || '#3B82F6',
             odAvatar: otherUserProfile.avatar_url,
+            odLastSeen: otherUserProfile.last_seen || null,
             lastMessage: msg.message || '📷 Image',
             lastMessageTime: msg.created_at,
             unreadCount: 0
@@ -2084,6 +2429,7 @@ const Page = () => {
             odUsername: activeConversationUser.username,
             odColor: activeConversationUser.color,
             odAvatar: activeConversationUser.avatar_url,
+            odLastSeen: null,
             lastMessage: lastMsg,
             lastMessageTime: new Date().toISOString(),
             unreadCount: 0
@@ -2138,7 +2484,7 @@ const Page = () => {
   };
 
   // ✅ Ouvrir une conversation
-  const openConversation = (otherUser: {id: string, username: string, color: string, avatar_url: string | null}) => {
+  const openConversation = (otherUser: {id: string, username: string, color: string, avatar_url: string | null, last_seen?: string | null}) => {
     setActiveConversation(otherUser.id);
     setActiveConversationUser(otherUser);
     loadPrivateMessages(otherUser.id);
@@ -2210,7 +2556,8 @@ const Page = () => {
       id: viewingProfile.id,
       username: viewingProfile.username,
       color: viewingProfile.color || '#3B82F6',
-      avatar_url: viewingProfile.avatar_url
+      avatar_url: viewingProfile.avatar_url,
+      last_seen: viewingProfile.last_seen
     });
   };
 
@@ -2294,20 +2641,27 @@ const Page = () => {
 
                 {/* Avatar */}
                 <div className="flex justify-center -mt-12 relative z-10">
-                  {viewingProfile.avatar_url ? (
-                    <img 
-                      src={viewingProfile.avatar_url} 
-                      alt="Avatar"
-                      className="w-24 h-24 rounded-full object-cover border-4 border-white shadow-lg"
-                    />
-                  ) : (
-                    <div 
-                      className="w-24 h-24 rounded-full flex items-center justify-center text-white text-3xl font-bold border-4 border-white shadow-lg"
-                      style={{ backgroundColor: viewingProfile.color || '#3B82F6' }}
-                    >
-                      {(viewingProfile.username || 'U')[0].toUpperCase()}
-                    </div>
-                  )}
+                  <div className="relative">
+                    {viewingProfile.avatar_url ? (
+                      <img 
+                        src={viewingProfile.avatar_url} 
+                        alt="Avatar"
+                        className="w-24 h-24 rounded-full object-cover border-4 border-white shadow-lg"
+                      />
+                    ) : (
+                      <div 
+                        className="w-24 h-24 rounded-full flex items-center justify-center text-white text-3xl font-bold border-4 border-white shadow-lg"
+                        style={{ backgroundColor: viewingProfile.color || '#3B82F6' }}
+                      >
+                        {(viewingProfile.username || 'U')[0].toUpperCase()}
+                      </div>
+                    )}
+                    {viewingProfile.id !== user?.id && (
+                      <div className="absolute bottom-0 right-0">
+                        <OnlineStatusIndicator lastSeen={viewingProfile.last_seen} size="lg" showOfflineAsOrange={true} className="border-2 border-white" />
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* Infos */}
@@ -2523,16 +2877,21 @@ const Page = () => {
                         }}
                       >
                         <div className="flex items-center space-x-3">
-                          {friend.avatar_url ? (
-                            <img src={friend.avatar_url} alt="" className="w-12 h-12 rounded-full object-cover border-2" style={{ borderColor: friend.color }} />
-                          ) : (
-                            <div 
-                              className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold"
-                              style={{ backgroundColor: friend.color }}
-                            >
-                              {(friend.username || 'U')[0].toUpperCase()}
+                          <div className="relative">
+                            {friend.avatar_url ? (
+                              <img src={friend.avatar_url} alt="" className="w-12 h-12 rounded-full object-cover border-2" style={{ borderColor: friend.color }} />
+                            ) : (
+                              <div 
+                                className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold"
+                                style={{ backgroundColor: friend.color }}
+                              >
+                                {(friend.username || 'U')[0].toUpperCase()}
+                              </div>
+                            )}
+                            <div className="absolute bottom-0 right-0">
+                              <OnlineStatusIndicator lastSeen={friend.last_seen} size="md" showOfflineAsOrange={true} className="border-2 border-white" />
                             </div>
-                          )}
+                          </div>
                           <div>
                             <p className="font-semibold" style={{ color: friend.color }}>{friend.username}</p>
                             {friend.bio && (
@@ -2550,7 +2909,8 @@ const Page = () => {
                                 id: friend.id,
                                 username: friend.username,
                                 color: friend.color,
-                                avatar_url: friend.avatar_url
+                                avatar_url: friend.avatar_url,
+                                last_seen: friend.last_seen
                               });
                             }}
                             className="p-2 text-gray-400 hover:text-purple-500 hover:bg-purple-50 rounded-lg transition-colors"
@@ -2586,6 +2946,120 @@ const Page = () => {
       )}
 
       {/* ✅ Modale Messages privés */}
+      {/* Modal Utilisateurs en ligne */}
+      {showOnlineUsersModal && (
+        <div 
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] animate-fade-in"
+          onClick={() => setShowOnlineUsersModal(false)}
+        >
+          <div 
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 max-h-[80vh] overflow-hidden animate-scale-in"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="bg-gradient-to-r from-green-500 to-emerald-500 px-6 py-4 flex justify-between items-center">
+              <div className="flex items-center space-x-2">
+                <FaUsers className="text-white" size={20} />
+                <h2 className="text-xl font-bold text-white">Utilisateurs en ligne</h2>
+              </div>
+              <button
+                onClick={() => setShowOnlineUsersModal(false)}
+                className="text-white hover:bg-white/20 p-2 rounded-lg transition-colors duration-200"
+              >
+                <FaTimes size={20} />
+              </button>
+            </div>
+
+            {/* Liste des utilisateurs */}
+            <div className="overflow-y-auto max-h-[calc(80vh-80px)]">
+              {loadingOnlineUsers ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
+                </div>
+              ) : onlineUsers.length === 0 ? (
+                <div className="text-center py-12 text-gray-500">
+                  <FaUsers size={48} className="mx-auto mb-4 text-gray-300" />
+                  <p>Aucun utilisateur en ligne pour le moment</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-gray-100">
+                  {onlineUsers.map((onlineUser) => (
+                    <div
+                      key={onlineUser.id}
+                      className="p-4 hover:bg-gray-50 transition-colors duration-200"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-3 flex-1 cursor-pointer group" onClick={() => {
+                          handleViewProfile(onlineUser.id);
+                          setShowOnlineUsersModal(false);
+                        }}>
+                          {/* Avatar */}
+                          <div className="relative">
+                            {onlineUser.avatar_url ? (
+                              <img
+                                src={onlineUser.avatar_url}
+                                alt={onlineUser.username}
+                                className="w-12 h-12 rounded-full object-cover border-2 group-hover:scale-110 transition-transform"
+                                style={{ borderColor: onlineUser.color || '#3B82F6' }}
+                              />
+                            ) : (
+                              <div
+                                className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold group-hover:scale-110 transition-transform"
+                                style={{ backgroundColor: onlineUser.color || '#3B82F6' }}
+                              >
+                                <FaUser className="text-white" size={20} />
+                              </div>
+                            )}
+                            <OnlineStatusIndicator
+                              lastSeen={onlineUser.last_seen}
+                              size="md"
+                              className="absolute bottom-0 right-0 border-2 border-white"
+                            />
+                          </div>
+
+                          {/* Info utilisateur */}
+                          <div className="flex-1 min-w-0 text-left">
+                            <p
+                              className="font-semibold truncate group-hover:underline cursor-pointer transition-all"
+                              style={{ color: onlineUser.color || '#3B82F6' }}
+                            >
+                              {onlineUser.username}
+                            </p>
+                            {onlineUser.bio && (
+                              <p className="text-xs text-gray-500 truncate">{onlineUser.bio}</p>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Actions */}
+                        <div className="flex items-center space-x-2 ml-2">
+                          {onlineUser.isFriend ? (
+                            <div className="flex items-center space-x-1 px-3 py-1.5 bg-green-50 text-green-600 rounded-lg text-sm font-medium">
+                              <FaUserCheck size={14} />
+                              <span>Ami</span>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => {
+                                sendFriendRequest(onlineUser.id);
+                              }}
+                              className="p-2 text-green-500 hover:bg-green-50 rounded-lg transition-colors duration-200"
+                              title="Ajouter en ami"
+                            >
+                              <FaUserPlus size={16} />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {showMessagesModal && (
         <div 
           className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] animate-fade-in"
@@ -2614,20 +3088,25 @@ const Page = () => {
                     >
                       <FaChevronLeft size={18} />
                     </button>
-                    {activeConversationUser.avatar_url ? (
-                      <img 
-                        src={activeConversationUser.avatar_url} 
-                        alt="" 
-                        className="w-10 h-10 rounded-full object-cover border-2 border-white/30"
-                      />
-                    ) : (
-                      <div 
-                        className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold"
-                        style={{ backgroundColor: activeConversationUser.color }}
-                      >
-                        {activeConversationUser.username[0].toUpperCase()}
+                    <div className="relative">
+                      {activeConversationUser.avatar_url ? (
+                        <img 
+                          src={activeConversationUser.avatar_url} 
+                          alt="" 
+                          className="w-10 h-10 rounded-full object-cover border-2 border-white/30"
+                        />
+                      ) : (
+                        <div 
+                          className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold"
+                          style={{ backgroundColor: activeConversationUser.color }}
+                        >
+                          {activeConversationUser.username[0].toUpperCase()}
+                        </div>
+                      )}
+                      <div className="absolute bottom-0 right-0">
+                        <OnlineStatusIndicator lastSeen={activeConversationUser.last_seen} size="sm" showOfflineAsOrange={true} className="border-2 border-white" />
                       </div>
-                    )}
+                    </div>
                     <span className="text-white font-semibold">{activeConversationUser.username}</span>
                   </div>
                 </>
@@ -2813,25 +3292,31 @@ const Page = () => {
                             id: conv.odId,
                             username: conv.odUsername,
                             color: conv.odColor,
-                            avatar_url: conv.odAvatar
+                            avatar_url: conv.odAvatar,
+                            last_seen: conv.odLastSeen
                           })}
                           className="flex-1 px-4 py-3 flex items-center space-x-3 text-left"
                         >
-                          {conv.odAvatar ? (
-                            <img 
-                              src={conv.odAvatar} 
-                              alt="" 
-                              className="w-12 h-12 rounded-full object-cover border-2"
-                              style={{ borderColor: conv.odColor }}
-                            />
-                          ) : (
-                            <div 
-                              className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold"
-                              style={{ backgroundColor: conv.odColor }}
-                            >
-                              {conv.odUsername[0].toUpperCase()}
+                          <div className="relative">
+                            {conv.odAvatar ? (
+                              <img 
+                                src={conv.odAvatar} 
+                                alt="" 
+                                className="w-12 h-12 rounded-full object-cover border-2"
+                                style={{ borderColor: conv.odColor }}
+                              />
+                            ) : (
+                              <div 
+                                className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold"
+                                style={{ backgroundColor: conv.odColor }}
+                              >
+                                {conv.odUsername[0].toUpperCase()}
+                              </div>
+                            )}
+                            <div className="absolute bottom-0 right-0">
+                              <OnlineStatusIndicator lastSeen={conv.odLastSeen} size="md" showOfflineAsOrange={true} />
                             </div>
-                          )}
+                          </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center justify-between">
                               <p className="font-semibold truncate" style={{ color: conv.odColor }}>
@@ -2892,18 +3377,26 @@ const Page = () => {
             <div className="relative" ref={userMenuRef}>
               <button
                 onClick={() => setShowUserMenu(!showUserMenu)}
-                className="flex items-center space-x-3 text-white px-4 py-2 rounded-lg hover:opacity-90 transition-all duration-200 shadow-md hover:shadow-lg"
+                className="relative flex items-center space-x-3 text-white px-4 py-2 rounded-lg hover:opacity-90 transition-all duration-200 shadow-md hover:shadow-lg"
                 style={{ backgroundColor: user?.color || '#3B82F6' }}
               >
                 {user?.avatar_url ? (
-                  <img 
-                    src={user.avatar_url} 
-                    alt="Avatar"
-                    className="w-8 h-8 rounded-full object-cover border-2 border-white"
-                  />
+                  <div className="relative">
+                    <img 
+                      src={user.avatar_url} 
+                      alt="Avatar"
+                      className="w-8 h-8 rounded-full object-cover border-2 border-white"
+                    />
+                    <div className="absolute bottom-0 right-0">
+                      <OnlineStatusIndicator lastSeen={user?.last_seen} size="sm" className="border-2 border-white" />
+                    </div>
+                  </div>
                 ) : (
-                  <div className="bg-white rounded-full p-2">
+                  <div className="relative bg-white rounded-full p-2">
                     <FaUser style={{ color: user?.color || '#3B82F6' }} size={16} />
+                    <div className="absolute bottom-0 right-0">
+                      <OnlineStatusIndicator lastSeen={user?.last_seen} size="sm" className="border-2 border-white" />
+                    </div>
                   </div>
                 )}
                 <span className="font-medium">{user?.name}</span>
@@ -3174,6 +3667,23 @@ const Page = () => {
                 </span>
               )}
             </button>
+
+            {/* Bouton Utilisateurs en ligne */}
+            <button
+              onClick={() => {
+                setShowOnlineUsersModal(true);
+                loadOnlineUsers();
+              }}
+              className="relative flex items-center space-x-2 px-4 py-2 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-all duration-200 shadow-sm hover:shadow"
+            >
+              <FaUsers className="text-green-500" size={18} />
+              <span className="font-medium text-gray-700 hidden sm:inline">En ligne</span>
+              {onlineUsers.length > 0 && (
+                <span className="absolute -top-2 -right-2 bg-green-500 text-white text-xs w-5 h-5 flex items-center justify-center rounded-full">
+                  {onlineUsers.length}
+                </span>
+              )}
+            </button>
           </div>
           
           <h1 className="text-xl font-bold text-gray-800 hidden sm:block">
@@ -3329,21 +3839,26 @@ const Page = () => {
                         className="flex items-center space-x-3 mb-2 cursor-pointer group"
                         onClick={() => handleViewProfile(item.user_id)}
                       >
-                        {item.avatar_url ? (
-                          <img 
-                            src={item.avatar_url} 
-                            alt="Avatar"
-                            className="w-10 h-10 rounded-full object-cover border-2 group-hover:scale-110 transition-transform"
-                            style={{ borderColor: item.user_color || '#3B82F6' }}
-                          />
-                        ) : (
-                          <div 
-                            className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm group-hover:scale-110 transition-transform"
-                            style={{ backgroundColor: item.user_color || '#3B82F6' }}
-                          >
-                            {(item.username || 'U')[0].toUpperCase()}
+                        <div className="relative">
+                          {item.avatar_url ? (
+                            <img 
+                              src={item.avatar_url} 
+                              alt="Avatar"
+                              className="w-10 h-10 rounded-full object-cover border-2 group-hover:scale-110 transition-transform"
+                              style={{ borderColor: item.user_color || '#3B82F6' }}
+                            />
+                          ) : (
+                            <div 
+                              className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm group-hover:scale-110 transition-transform"
+                              style={{ backgroundColor: item.user_color || '#3B82F6' }}
+                            >
+                              {(item.username || 'U')[0].toUpperCase()}
+                            </div>
+                          )}
+                          <div className="absolute bottom-0 right-0">
+                            <OnlineStatusIndicator lastSeen={item.last_seen} size="sm" showOfflineAsOrange={true} />
                           </div>
-                        )}
+                        </div>
                         <p className="font-semibold group-hover:underline" style={{ color: item.user_color || '#3B82F6' }}>
                           {item.username || 'Utilisateur'}
                         </p>
