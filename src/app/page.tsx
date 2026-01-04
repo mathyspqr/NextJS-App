@@ -1,5 +1,7 @@
 'use client';
 
+/* eslint-disable @next/next/no-img-element */
+
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { FaTrash, FaHeart, FaRegHeart, FaArrowRight, FaUser, FaSignOutAlt, FaEdit, FaCheck, FaTimes, FaSmile, FaImage, FaCamera, FaUserFriends, FaUserPlus, FaUserCheck, FaBell, FaUserMinus, FaEnvelope, FaPaperPlane, FaChevronLeft, FaUsers } from 'react-icons/fa';
 import Confetti from 'react-confetti';
@@ -1638,7 +1640,7 @@ const Page = () => {
   };
 
 // ✅ Mise à jour du statut en ligne
-const updateOnlineStatus = async () => {
+const updateOnlineStatus = useCallback(async () => {
   if (!user) return;
 
   const now = new Date().toISOString();
@@ -1677,7 +1679,7 @@ const updateOnlineStatus = async () => {
   } catch (err) {
     console.error('❌ Erreur mise à jour last_seen:', err);
   }
-};
+}, [user?.id, viewingProfile?.id]);
 
 
   // ✅ Mise à jour lors de l'activité utilisateur (throttled à 30 secondes)
@@ -1692,7 +1694,7 @@ const updateOnlineStatus = async () => {
       console.log('🖱️ Activité détectée - Mise à jour du statut');
       updateOnlineStatus();
     }
-  }, [user]);
+  }, [user, updateOnlineStatus]);
 
 // ✅ Mise à jour initiale au montage (arrivée sur le site)
 useEffect(() => {
@@ -1718,7 +1720,7 @@ useEffect(() => {
     clearInterval(interval);
     window.removeEventListener('beforeunload', handleBeforeUnload);
   };
-}, [user?.id]);
+}, [user?.id, updateOnlineStatus]);
 
 
   // ✅ Event listeners pour l'activité utilisateur (clics et mouvements)
@@ -1734,7 +1736,7 @@ useEffect(() => {
       window.removeEventListener('mousemove', handleUserActivity);
       window.removeEventListener('keydown', handleUserActivity);
     };
-}, [user?.id, handleUserActivity]);
+}, [user, handleUserActivity]);
 
   const handleLogout = async () => {
     closeUserMenu();
@@ -2191,7 +2193,7 @@ useEffect(() => {
   };
 
   // ✅ Charger les utilisateurs en ligne
-  const loadOnlineUsers = async () => {
+  const loadOnlineUsers = useCallback(async () => {
     if (!user) return;
     setLoadingOnlineUsers(true);
 
@@ -2234,7 +2236,7 @@ useEffect(() => {
     } finally {
       setLoadingOnlineUsers(false);
     }
-  };
+  }, [user?.id]);
 
   // ✅ Envoyer une demande d'ami
   const sendFriendRequest = async (targetUserId: string) => {
@@ -2330,11 +2332,7 @@ useEffect(() => {
     }
   };
 
-  // ✅ Ouvrir la modale amis
-  const openFriendsModal = () => {
-    setShowFriendsModal(true);
-    loadFriends();
-  };
+
 
   // ✅ Charger les conversations
   const loadConversations = async () => {
