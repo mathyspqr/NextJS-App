@@ -1638,8 +1638,8 @@ const Page = () => {
     setTimeout(() => setShowConfetti(false), CONFETTI_DURATION);
   };
 
-// ✅ Mise à jour du statut en ligne
-const updateOnlineStatus = async () => {
+// ✅ Mise à jour du statut en ligne (stable reference)
+const updateOnlineStatus = useCallback(async () => {
   if (!user) return;
 
   const now = new Date().toISOString();
@@ -1733,7 +1733,7 @@ useEffect(() => {
     clearInterval(interval);
     window.removeEventListener('beforeunload', handleBeforeUnload);
   };
-}, [user?.id]);
+}, [user?.id, loadOnlineUsers, updateOnlineStatus]);
 
 
   // ✅ Event listeners pour l'activité utilisateur (clics et mouvements)
@@ -1797,7 +1797,7 @@ useEffect(() => {
   return () => {
     supabase.removeChannel(activityChannel);
   };
-}, [isAuthenticated, user, activeConversationUser, viewingProfile]);
+}, [isAuthenticated, user, activeConversationUser, viewingProfile, loadOnlineUsers]);
 
   const handleLogout = async () => {
     closeUserMenu();
@@ -2253,8 +2253,8 @@ useEffect(() => {
     }
   };
 
-  // ✅ Charger les utilisateurs en ligne
-  const loadOnlineUsers = async () => {
+  // ✅ Charger les utilisateurs en ligne (stable reference)
+  const loadOnlineUsers = useCallback(async () => {
     if (!user) return;
     setLoadingOnlineUsers(true);
 
@@ -2394,10 +2394,7 @@ useEffect(() => {
   };
 
   // ✅ Ouvrir la modale amis
-  const openFriendsModal = () => {
-    setShowFriendsModal(true);
-    loadFriends();
-  };
+  // (supprimé) `openFriendsModal` n'était pas utilisé — suppression pour corriger l'erreur ESLint
 
   // ✅ Charger les conversations
   const loadConversations = async () => {
