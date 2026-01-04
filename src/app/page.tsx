@@ -733,6 +733,52 @@ const Page = () => {
     };
   }, [isAuthenticated, user]);
 
+  // ✅ Charger les utilisateurs en ligne
+  const loadOnlineUsers = async () => {
+    if (!user) return;
+    setLoadingOnlineUsers(true);
+
+    try {
+      // Récupérer tous les utilisateurs en ligne (actifs dans les 5 dernières minutes)
+      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+      
+      // Récupérer les IDs de tous les amis
+      const { data: friendships } = await supabase
+        .from('friendships')
+        .select('requester_id, addressee_id, status')
+        .or(`requester_id.eq.${user.id},addressee_id.eq.${user.id}`)
+        .eq('status', 'accepted');
+      
+      // Créer un Set des IDs d'amis
+      const friendIds = new Set<string>();
+      friendships?.forEach(f => {
+        friendIds.add(f.requester_id === user.id ? f.addressee_id : f.requester_id);
+      });
+      
+      // Récupérer tous les utilisateurs en ligne sauf soi-même
+      const { data: users, error } = await supabase
+        .from('profiles')
+        .select('id, username, color, avatar_url, bio, last_seen')
+        .gte('last_seen', fiveMinutesAgo)
+        .neq('id', user.id);
+
+      if (error) throw error;
+
+      // Ajouter l'info si c'est un ami
+      const usersWithFriendStatus = (users || []).map(u => ({
+        ...u,
+        isFriend: friendIds.has(u.id)
+      }));
+
+      setOnlineUsers(usersWithFriendStatus);
+    } catch (err) {
+      console.error('❌ Erreur chargement utilisateurs en ligne:', err);
+      toast.error('Erreur lors du chargement des utilisateurs');
+    } finally {
+      setLoadingOnlineUsers(false);
+    }
+  };
+
   // ✅ Realtime - Statut en ligne (last_seen) en temps réel
   useEffect(() => {
     if (!isAuthenticated || !user) return;
@@ -2188,52 +2234,6 @@ useEffect(() => {
       toast.error('Erreur lors du chargement des amis');
     } finally {
       setLoadingFriends(false);
-    }
-  };
-
-  // ✅ Charger les utilisateurs en ligne
-  const loadOnlineUsers = async () => {
-    if (!user) return;
-    setLoadingOnlineUsers(true);
-
-    try {
-      // Récupérer tous les utilisateurs en ligne (actifs dans les 5 dernières minutes)
-      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
-      
-      // Récupérer les IDs de tous les amis
-      const { data: friendships } = await supabase
-        .from('friendships')
-        .select('requester_id, addressee_id, status')
-        .or(`requester_id.eq.${user.id},addressee_id.eq.${user.id}`)
-        .eq('status', 'accepted');
-      
-      // Créer un Set des IDs d'amis
-      const friendIds = new Set<string>();
-      friendships?.forEach(f => {
-        friendIds.add(f.requester_id === user.id ? f.addressee_id : f.requester_id);
-      });
-      
-      // Récupérer tous les utilisateurs en ligne sauf soi-même
-      const { data: users, error } = await supabase
-        .from('profiles')
-        .select('id, username, color, avatar_url, bio, last_seen')
-        .gte('last_seen', fiveMinutesAgo)
-        .neq('id', user.id);
-
-      if (error) throw error;
-
-      // Ajouter l'info si c'est un ami
-      const usersWithFriendStatus = (users || []).map(u => ({
-        ...u,
-        isFriend: friendIds.has(u.id)
-      }));
-
-      setOnlineUsers(usersWithFriendStatus);
-    } catch (err) {
-      console.error('❌ Erreur chargement utilisateurs en ligne:', err);
-      toast.error('Erreur lors du chargement des utilisateurs');
-    } finally {
-      setLoadingOnlineUsers(false);
     }
   };
 
