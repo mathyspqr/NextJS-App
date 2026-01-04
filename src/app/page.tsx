@@ -6,6 +6,7 @@ import Confetti from 'react-confetti';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import CountUp from 'react-countup';
+import Image from 'next/image';
 
 import LoginRegister from './LoginRegister';
 import { createClient } from '../app/utils/supabase/client';
@@ -818,7 +819,7 @@ const Page = () => {
     return () => {
       supabase.removeChannel(onlineStatusChannel);
     };
-  }, [isAuthenticated, user, activeConversationUser, viewingProfile]);
+  }, [isAuthenticated, user, activeConversationUser, viewingProfile, loadOnlineUsers]);
 
   // ✅ Realtime - Changements de profil en temps réel
   useEffect(() => {
@@ -956,7 +957,7 @@ const Page = () => {
   // ✅ Garder la ref à jour pour le Realtime
   useEffect(() => {
     activeConversationRef.current = activeConversation;
-  }, [activeConversation]);
+  }, [activeConversation, activeConversationUser, viewingProfile]);
 
   // ✅ Realtime pour les messages privés
   useEffect(() => {
@@ -1617,7 +1618,7 @@ const Page = () => {
       }
 
       // ✅ Récupérer l'ID du nouveau commentaire
-      const newCommentData = await response.json();
+      // const newCommentData = await response.json();
 
       toast.info('💬 Commentaire ajouté !', { autoClose: CONFETTI_DURATION });
       setNewComment('');
@@ -1692,7 +1693,7 @@ const updateOnlineStatus = async () => {
       console.log('🖱️ Activité détectée - Mise à jour du statut');
       updateOnlineStatus();
     }
-  }, [user]);
+  }, [user, updateOnlineStatus]);
 
 // ✅ Mise à jour initiale au montage (arrivée sur le site)
 useEffect(() => {
@@ -1718,7 +1719,7 @@ useEffect(() => {
     clearInterval(interval);
     window.removeEventListener('beforeunload', handleBeforeUnload);
   };
-}, [user?.id]);
+}, [user?.id, updateOnlineStatus, loadOnlineUsers]);
 
 
   // ✅ Event listeners pour l'activité utilisateur (clics et mouvements)
@@ -1734,7 +1735,7 @@ useEffect(() => {
       window.removeEventListener('mousemove', handleUserActivity);
       window.removeEventListener('keydown', handleUserActivity);
     };
-}, [user?.id, handleUserActivity]);
+}, [user?.id, handleUserActivity, user]);
 
   const handleLogout = async () => {
     closeUserMenu();
@@ -2330,12 +2331,6 @@ useEffect(() => {
     }
   };
 
-  // ✅ Ouvrir la modale amis
-  const openFriendsModal = () => {
-    setShowFriendsModal(true);
-    loadFriends();
-  };
-
   // ✅ Charger les conversations
   const loadConversations = async () => {
     if (!user) return;
@@ -2700,12 +2695,15 @@ useEffect(() => {
           >
             <FaTimes size={24} />
           </button>
-          <img 
-            src={lightboxImage} 
-            alt="Image en grand" 
-            className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg shadow-2xl animate-scale-in"
-            onClick={(e) => e.stopPropagation()}
-          />
+          <div className="relative max-w-[90vw] max-h-[90vh]">
+            <Image 
+              src={lightboxImage} 
+              alt="Image en grand" 
+              fill
+              className="object-contain rounded-lg shadow-2xl animate-scale-in"
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
           <a
             href={lightboxImage}
             target="_blank"

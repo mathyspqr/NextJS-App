@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
 interface OnlineStatusIndicatorProps {
   lastSeen: string | null | undefined;
@@ -15,7 +15,7 @@ const OnlineStatusIndicator = ({
   className = '',
   showOfflineAsOrange = false 
 }: OnlineStatusIndicatorProps) => {
-  const getStatus = (): 'online' | 'offline' => {
+  const getStatus = useCallback((): 'online' | 'offline' => {
     if (!lastSeen) return 'offline';
     
     const lastSeenDate = new Date(lastSeen);
@@ -24,7 +24,7 @@ const OnlineStatusIndicator = ({
     
     // Seuil à 5 minutes (300 secondes)
     return diffInSeconds <= 300 ? 'online' : 'offline';
-  };
+  }, [lastSeen]);
 
   const [status, setStatus] = useState<'online' | 'offline'>(getStatus());
 
@@ -47,7 +47,7 @@ const OnlineStatusIndicator = ({
     }, 5 * 1000);
 
     return () => clearInterval(interval);
-  }, [lastSeen, getStatus, status]); // Ajout de getStatus et status dans les dépendances
+  }, [lastSeen, getStatus]); // Retirer status car il change à chaque rendu
   
   // Définir la taille en pixels
   const sizeClasses = {
