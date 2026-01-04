@@ -1617,7 +1617,7 @@ const Page = () => {
       }
 
       // ✅ Récupérer l'ID du nouveau commentaire
-      const newCommentData = await response.json();
+      await response.json();
 
       toast.info('💬 Commentaire ajouté !', { autoClose: CONFETTI_DURATION });
       setNewComment('');
