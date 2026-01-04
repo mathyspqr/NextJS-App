@@ -198,6 +198,7 @@ const Page = () => {
   const [lastMessageCount, setLastMessageCount] = useState(0);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [myLastSeen, setMyLastSeen] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const typingBroadcastInterval = useRef<NodeJS.Timeout | null>(null);
   const typingRemovalTimeouts = useRef<Record<string, NodeJS.Timeout>>({});
@@ -230,6 +231,7 @@ const Page = () => {
           bio: userBio,
           last_seen: userLastSeen,
         });
+        setMyLastSeen(userLastSeen);
         setEditingColor(userColor);
         setEditingBio(userBio);
 
@@ -1555,6 +1557,7 @@ const Page = () => {
     if (!user) return;
     
     const now = new Date().toISOString();
+    setMyLastSeen(now);
     console.log('📝 Mise à jour last_seen:', now);
     
     try {
@@ -3407,14 +3410,24 @@ const Page = () => {
                       unoptimized
                     />
                     <div className="absolute bottom-0 right-0">
-                      <OnlineStatusIndicator lastSeen={user?.last_seen} size="sm" className="border-2 border-white" />
+                      <OnlineStatusIndicator
+                        lastSeen={myLastSeen ?? user?.last_seen}
+                        size="sm"
+                        showOfflineAsOrange
+                        className="border-2 border-white"
+                      />
                     </div>
                   </div>
                 ) : (
                   <div className="relative bg-white rounded-full p-2">
                     <FaUser style={{ color: user?.color || '#3B82F6' }} size={16} />
                     <div className="absolute bottom-0 right-0">
-                      <OnlineStatusIndicator lastSeen={user?.last_seen} size="sm" className="border-2 border-white" />
+                      <OnlineStatusIndicator
+                        lastSeen={myLastSeen ?? user?.last_seen}
+                        size="sm"
+                        showOfflineAsOrange
+                        className="border-2 border-white"
+                      />
                     </div>
                   </div>
                 )}
