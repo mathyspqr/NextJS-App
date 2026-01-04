@@ -104,3 +104,23 @@ if (req.method === "GET" && path === "/mathys") {
 
 // Si vous voulez aussi supporter les images dans les commentaires plus tard,
 // faites la même chose pour la route des commentaires
+
+
+// ========================================
+// 4. NOUVELLE ROUTE : GET /users
+// Ajoutez cette nouvelle route pour les mentions @username
+// ========================================
+
+if (req.method === "GET" && path === "/users") {
+  const user = await getUserFromReq(req);
+  if (!user) return res.status(401).json({ error: "Non authentifié" });
+
+  const { data, error } = await supabaseAdmin
+    .from("profiles")
+    .select("id, name, color, avatar_url")
+    .order("name", { ascending: true });
+
+  if (error) return res.status(500).json({ error: error.message });
+  
+  return res.json(data || []);
+}

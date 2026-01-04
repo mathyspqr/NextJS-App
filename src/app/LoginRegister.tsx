@@ -10,6 +10,10 @@ const supabase = createClient();
 interface User {
   id: string;   // UUID Supabase
   name: string; // username (metadata) ou email
+  color?: string;
+  avatar_url?: string;
+  bio?: string;
+  last_seen?: string | null;
 }
 
 interface LoginRegisterProps {
@@ -44,6 +48,10 @@ const LoginRegister: React.FC<LoginRegisterProps> = ({ onLogin }) => {
         onLogin({
           id: u?.id ?? '',
           name: (u?.user_metadata?.username as string) ?? u?.email ?? 'Utilisateur',
+          color: undefined,
+          avatar_url: undefined,
+          bio: undefined,
+          last_seen: null,
         });
 
         setMessageType('success');

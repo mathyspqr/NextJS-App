@@ -47,7 +47,7 @@ const OnlineStatusIndicator = ({
     }, 5 * 1000);
 
     return () => clearInterval(interval);
-  }, [lastSeen]); // Retirer status des dépendances pour éviter la boucle
+  }, [lastSeen, getStatus, status]); // Ajout de getStatus et status dans les dépendances
   
   // Définir la taille en pixels
   const sizeClasses = {

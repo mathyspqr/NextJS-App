@@ -53,3 +53,23 @@ if (req.method === "GET" && path === "/mathys") {
   
   return res.json(messagesWithUsername);
 }
+
+
+// ========================================
+// ROUTE 3 : GET /users
+// Nouvelle route pour récupérer la liste des utilisateurs pour les mentions
+// ========================================
+
+if (req.method === "GET" && path === "/users") {
+  const user = await getUserFromReq(req);
+  if (!user) return res.status(401).json({ error: "Non authentifié" });
+
+  const { data, error } = await supabaseAdmin
+    .from("profiles")
+    .select("id, name, color, avatar_url")
+    .order("name", { ascending: true });
+
+  if (error) return res.status(500).json({ error: error.message });
+  
+  return res.json(data || []);
+}

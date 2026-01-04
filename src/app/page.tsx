@@ -5,6 +5,7 @@ import { FaTrash, FaHeart, FaRegHeart, FaArrowRight, FaUser, FaSignOutAlt, FaEdi
 import Confetti from 'react-confetti';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+import CountUp from 'react-countup';
 
 import LoginRegister from './LoginRegister';
 import { createClient } from '../app/utils/supabase/client';
@@ -133,6 +134,7 @@ const Page = () => {
   const [error, setError] = useState('');
   const [showConfetti, setShowConfetti] = useState(false);
   const [commentingMessageId, setCommentingMessageId] = useState<number | null>(null);
+  const [closingMessageId, setClosingMessageId] = useState<number | null>(null);
   const [newComment, setNewComment] = useState('');
   const [commentairesByMessage, setCommentairesByMessage] = useState<Record<number, Commentaire[]>>({});
   const [loadingComments, setLoadingComments] = useState<Record<number, boolean>>({});
@@ -156,16 +158,20 @@ const Page = () => {
   const [isUpdatingBio, setIsUpdatingBio] = useState(false);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [closingProfileModal, setClosingProfileModal] = useState(false);
   const [viewingProfile, setViewingProfile] = useState<ProfileData | null>(null);
   const [loadingProfile, setLoadingProfile] = useState(false);
   const [showFriendsModal, setShowFriendsModal] = useState(false);
+  const [closingFriendsModal, setClosingFriendsModal] = useState(false);
   const [friends, setFriends] = useState<Friend[]>([]);
   const [friendRequests, setFriendRequests] = useState<FriendRequest[]>([]);
   const [loadingFriends, setLoadingFriends] = useState(false);
   const [friendshipStatus, setFriendshipStatus] = useState<'none' | 'pending_sent' | 'pending_received' | 'accepted'>('none');
   const [sendingFriendRequest, setSendingFriendRequest] = useState(false);
   const [showMessagesModal, setShowMessagesModal] = useState(false);
+  const [closingMessagesModal, setClosingMessagesModal] = useState(false);
   const [showOnlineUsersModal, setShowOnlineUsersModal] = useState(false);
+  const [closingOnlineUsersModal, setClosingOnlineUsersModal] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState<ProfileData[]>([]);
   const [loadingOnlineUsers, setLoadingOnlineUsers] = useState(false);
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -195,9 +201,11 @@ const Page = () => {
   const emojiPickerRef = useRef<HTMLDivElement>(null);
   const [usersTyping, setUsersTyping] = useState<Record<string, string>>({});
   const [lastMessageCount, setLastMessageCount] = useState(0);
+  const [lastCommentCount, setLastCommentCount] = useState(0);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const commentsEndRef = useRef<HTMLDivElement>(null);
   const typingBroadcastInterval = useRef<NodeJS.Timeout | null>(null);
   const typingRemovalTimeouts = useRef<Record<string, NodeJS.Timeout>>({});
   const lastActivityUpdate = useRef<number>(0);
@@ -211,13 +219,14 @@ const Page = () => {
         // Récupérer la couleur, avatar et bio depuis profiles
         const { data: profile } = await supabase
           .from('profiles')
-          .select('color, avatar_url, bio, last_seen') // Ajout de last_seen
+          .select('color, avatar_url, bio, last_seen')
           .eq('id', u.id)
           .single();
         
         const userColor = profile?.color || '#3B82F6';
         const userAvatar = profile?.avatar_url || null;
         const userBio = profile?.bio || '';
+        const userLastSeen = profile?.last_seen || null;
         
         setIsAuthenticated(true);
         setUser({
@@ -226,7 +235,7 @@ const Page = () => {
           color: userColor,
           avatar_url: userAvatar,
           bio: userBio,
-          last_seen: profile?.last_seen || null, // Ajout de last_seen
+          last_seen: userLastSeen,
         });
         setEditingColor(userColor);
         setEditingBio(userBio);
@@ -309,7 +318,7 @@ const Page = () => {
         (Array.isArray(data) ? data : []).map(async (message: Message & { user_id: string }) => {
           const { data: profile, error: profileError } = await supabase
             .from('profiles')
-            .select('color, last_seen')
+            .select('color, last_seen, avatar_url')
             .eq('id', message.user_id)
             .single();
           
@@ -318,6 +327,7 @@ const Page = () => {
           }
           
           const userColor = profile?.color || '#3B82F6';
+          const avatarUrl = profile?.avatar_url;
           console.log('🎨 Message', message.id, 'user', message.user_id, 'couleur:', userColor);
           
           return {
@@ -325,6 +335,7 @@ const Page = () => {
             liked: likedMessageIds.includes(message.id),
             likes: likedMessageIds.filter((id: number) => id === message.id).length,
             user_color: userColor,
+            avatar_url: avatarUrl,
             last_seen: profile?.last_seen || null,
             edited: message.edited ?? false,
           };
@@ -370,12 +381,13 @@ const Page = () => {
           // ✅ Récupérer le username depuis la table profiles avec le user_id
           const { data: profile } = await supabase
             .from('profiles')
-            .select('username, color')
+            .select('username, color, avatar_url, last_seen')
             .eq('id', newMsg.user_id)
             .single();
           
           const username = profile?.username || 'Utilisateur';
           const userColor = profile?.color || '#3B82F6';
+          const avatarUrl = profile?.avatar_url;
           
           // ✅ Notification si le message n'est pas de l'utilisateur actuel
           if (newMsg.user_id !== user?.id) {
@@ -391,17 +403,28 @@ const Page = () => {
           console.log('✅ Ajout du message avec image_url:', newMsg.image_url);
 
           // ✅ Ajouter le message à la liste avec le username et la couleur
-          setMessages(prev => [...prev, {
-            id: newMsg.id,
-            message: newMsg.message || "",
-            liked: false,
-            likes: 0,
-            user_id: newMsg.user_id,
-            username: username,
-            user_color: userColor,
-            image_url: newMsg.image_url ?? undefined,
-            edited: newMsg.edited ?? false
-          }]);
+          setMessages(prev => {
+            // ✅ Vérifier si le message n'existe pas déjà (éviter les doublons)
+            const exists = prev.some(msg => msg.id === newMsg.id);
+            if (exists) {
+              console.log('⚠️ Message déjà présent, ignoré');
+              return prev;
+            }
+
+            return [...prev, {
+              id: newMsg.id,
+              message: newMsg.message || "",
+              liked: false,
+              likes: 0,
+              user_id: newMsg.user_id,
+              username: username,
+              user_color: userColor,
+              avatar_url: avatarUrl,
+              last_seen: profile?.last_seen,
+              image_url: newMsg.image_url ?? undefined,
+              edited: newMsg.edited ?? false
+            }];
+          });
         }
       )
       .on(
@@ -486,12 +509,13 @@ const Page = () => {
           // ✅ Récupérer le username et la couleur depuis la table profiles
           const { data: profile } = await supabase
             .from('profiles')
-            .select('username, color')
+            .select('username, color, avatar_url')
             .eq('id', newComment.user_id)
             .single();
           
           const username = profile?.username || 'Utilisateur';
           const userColor = profile?.color || '#3B82F6';
+          const avatarUrl = profile?.avatar_url;
           
           console.log('✅ Commentaire traité:', { 
             id: newComment.id, 
@@ -533,7 +557,8 @@ const Page = () => {
                   user_id: newComment.user_id,
                   commentaire: newComment.commentaire,
                   username: username,
-                  user_color: userColor
+                  user_color: userColor,
+                  avatar_url: avatarUrl
                 }
               ]
             };
@@ -795,6 +820,139 @@ const Page = () => {
     };
   }, [isAuthenticated, user, activeConversationUser, viewingProfile]);
 
+  // ✅ Realtime - Changements de profil en temps réel
+  useEffect(() => {
+    if (!isAuthenticated || !user) return;
+
+    const profileChangesChannel = supabase
+      .channel('profile-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'profiles'
+        },
+        (payload) => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const updated = payload.new as any;
+          const userId = updated.id;
+
+          // Ne pas traiter nos propres changements (déjà gérés localement)
+          if (userId === user.id) return;
+
+          const updatedProfile = {
+            id: updated.id,
+            username: updated.username,
+            color: updated.color,
+            avatar_url: updated.avatar_url,
+            bio: updated.bio,
+            last_seen: updated.last_seen
+          };
+
+          // Mettre à jour dans la liste des amis si présent
+          setFriends(prev => prev.map(friend =>
+            friend.id === userId
+              ? { ...friend, ...updatedProfile }
+              : friend
+          ));
+
+          // Mettre à jour dans les conversations si présent
+          setConversations(prev => prev.map(conv =>
+            conv.odId === userId
+              ? {
+                  ...conv,
+                  odUsername: updatedProfile.username,
+                  odColor: updatedProfile.color,
+                  odAvatar: updatedProfile.avatar_url,
+                  odLastSeen: updatedProfile.last_seen
+                }
+              : conv
+          ));
+
+          // Mettre à jour dans la conversation active
+          if (activeConversationUser && activeConversationUser.id === userId) {
+            setActiveConversationUser(prev => prev ? {
+              ...prev,
+              username: updatedProfile.username,
+              color: updatedProfile.color,
+              avatar_url: updatedProfile.avatar_url,
+              last_seen: updatedProfile.last_seen
+            } : null);
+          }
+
+          // Mettre à jour dans le profil affiché
+          if (viewingProfile && viewingProfile.id === userId) {
+            setViewingProfile(prev => prev ? { ...prev, ...updatedProfile } : null);
+          }
+
+          // Mettre à jour dans onlineUsers si présent
+          setOnlineUsers(prev => {
+            const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
+            const lastSeenTime = updated.last_seen ? new Date(updated.last_seen).getTime() : 0;
+            const isOnline = lastSeenTime >= fiveMinutesAgo;
+
+            const existingIndex = prev.findIndex(u => u.id === userId);
+            if (existingIndex >= 0) {
+              if (isOnline) {
+                // Mettre à jour
+                return prev.map(u => u.id === userId ? { ...u, ...updatedProfile } : u);
+              } else {
+                // Retirer
+                return prev.filter(u => u.id !== userId);
+              }
+            }
+            return prev;
+          });
+
+          // Mettre à jour dans les messages publics
+          setMessages(prev => prev.map(msg =>
+            msg.user_id === userId
+              ? {
+                  ...msg,
+                  username: updatedProfile.username,
+                  user_color: updatedProfile.color,
+                  avatar_url: updatedProfile.avatar_url,
+                  last_seen: updatedProfile.last_seen
+                }
+              : msg
+          ));
+
+          // Mettre à jour dans les commentaires
+          setCommentairesByMessage(prev => {
+            const newCommentairesByMessage = { ...prev };
+            Object.keys(newCommentairesByMessage).forEach(messageId => {
+              newCommentairesByMessage[Number(messageId)] = newCommentairesByMessage[Number(messageId)].map(comment =>
+                comment.user_id === userId
+                  ? {
+                      ...comment,
+                      username: updatedProfile.username,
+                      user_color: updatedProfile.color,
+                      avatar_url: updatedProfile.avatar_url
+                    }
+                  : comment
+              );
+            });
+            return newCommentairesByMessage;
+          });
+
+          // Mettre à jour dans la liste des utilisateurs en ligne
+          setOnlineUsers(prev => prev.map(u =>
+            u.id === userId
+              ? { ...u, ...updatedProfile }
+              : u
+          ));
+
+          console.log('👤 Profil mis à jour en temps réel:', updatedProfile);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(profileChangesChannel);
+    };
+  }, [isAuthenticated, user]);
+
   // ✅ Garder la ref à jour pour le Realtime
   useEffect(() => {
     activeConversationRef.current = activeConversation;
@@ -1030,6 +1188,16 @@ const Page = () => {
     });
   }, [user, activeConversation]);
 
+  // ✅ Fonction pour scroller en bas des commentaires
+  const scrollToBottomComments = useCallback((smooth = true) => {
+    if (commentsEndRef.current) {
+      commentsEndRef.current.scrollIntoView({
+        behavior: smooth ? 'smooth' : 'auto',
+        block: 'end'
+      });
+    }
+  }, []);
+
   // ✅ Fonction pour scroller en bas des messages privés
   const scrollToBottomPrivate = useCallback((smooth = true) => {
     if (privateMessagesContainerRef.current) {
@@ -1136,6 +1304,18 @@ const Page = () => {
     }
   }, [messages.length, lastMessageCount]);
 
+  // ✅ Scroll automatique vers le bas quand un nouveau commentaire arrive
+  useEffect(() => {
+    if (commentingMessageId) {
+      const currentComments = commentairesByMessage[commentingMessageId] || [];
+      if (currentComments.length > lastCommentCount) {
+        // Délai pour laisser l'animation du nouveau commentaire se terminer
+        setTimeout(() => scrollToBottomComments(true), 150);
+        setLastCommentCount(currentComments.length);
+      }
+    }
+  }, [commentairesByMessage, commentingMessageId, lastCommentCount, scrollToBottomComments]);
+
   const fetchCommentaires = useCallback(async (messageId: number, forceReload = false) => {
     // ✅ Ne charger que si pas déjà en cache ou si rechargement forcé
     if (commentairesByMessage[messageId] && !forceReload) {
@@ -1155,7 +1335,7 @@ const Page = () => {
         commentsData.map(async (comment: Commentaire & { user_id: string }) => {
           const { data: profile, error: profileError } = await supabase
             .from('profiles')
-            .select('color')
+            .select('color, avatar_url')
             .eq('id', comment.user_id)
             .single();
           
@@ -1164,11 +1344,13 @@ const Page = () => {
           }
           
           const userColor = profile?.color || '#10B981';
+          const avatarUrl = profile?.avatar_url;
           console.log('🎨 Commentaire', comment.id, 'user', comment.user_id, 'couleur:', userColor);
           
           return {
             ...comment,
-            user_color: userColor
+            user_color: userColor,
+            avatar_url: avatarUrl
           };
         })
       );
@@ -1258,7 +1440,14 @@ const Page = () => {
       setNewMessage('');
       setImageFile(null);
       setImagePreview(null);
-      await fetchMessages();
+      
+      // ✅ Plus besoin d'ajouter localement - le realtime s'en charge
+      // Le message sera ajouté automatiquement via le listener realtime
+      
+      // ✅ Mettre à jour le statut en ligne après un court délai pour éviter les conflits de rendu
+      setTimeout(() => updateOnlineStatus(), 100);
+      
+      // ✅ Le realtime ajoutera le message pour tous les utilisateurs (y compris l'auteur)
       triggerConfetti();
       toast.success('🎉 Message ajouté avec succès !', { autoClose: CONFETTI_DURATION });
     } catch (err) {
@@ -1381,17 +1570,30 @@ const Page = () => {
     }
   };
 
-  const handleComment = useCallback((id: number) => {
+  const handleComment = useCallback(async (id: number) => {
     const isOpening = commentingMessageId !== id;
     
-    // ✅ Ouvrir immédiatement l'interface (optimistic UI)
-    setCommentingMessageId(isOpening ? id : null);
-    
-    // ✅ Charger les commentaires en arrière-plan
     if (isOpening) {
-      fetchCommentaires(id);
+      // ✅ Ouvrir immédiatement l'interface (optimistic UI)
+      setCommentingMessageId(id);
+      setClosingMessageId(null); // reset
+      
+      // ✅ Remettre le compteur de commentaires à 0 pour le scroll
+      setLastCommentCount(0);
+      
+      // ✅ Charger les commentaires en arrière-plan
+      await fetchCommentaires(id);
+      // ✅ Scroller vers le bas après le chargement avec délai pour laisser les animations se terminer
+      setTimeout(() => scrollToBottomComments(true), 300);
+    } else {
+      // ✅ Fermer avec animation
+      setClosingMessageId(id);
+      setTimeout(() => {
+        setCommentingMessageId(null);
+        setClosingMessageId(null);
+      }, 200); // durée de fadeOut
     }
-  }, [commentingMessageId, fetchCommentaires]);
+  }, [commentingMessageId, fetchCommentaires, scrollToBottomComments]);
 
   const handleCommentSubmit = async (e: React.FormEvent, id: number) => {
     e.preventDefault();
@@ -1414,16 +1616,17 @@ const Page = () => {
         throw new Error(`Erreur ajout commentaire (${response.status}) : ${txt}`);
       }
 
+      // ✅ Récupérer l'ID du nouveau commentaire
+      const newCommentData = await response.json();
+
       toast.info('💬 Commentaire ajouté !', { autoClose: CONFETTI_DURATION });
       setNewComment('');
       
-      // ✅ Recharger uniquement les commentaires de ce message
-      const commResponse = await fetch(`${BASE_URL}/messages/${id}/commentaires`);
-      const commData = await commResponse.json();
-      setCommentairesByMessage(prev => ({
-        ...prev,
-        [id]: Array.isArray(commData) ? commData : []
-      }));
+      // ✅ Plus besoin d'ajouter localement - le realtime s'en charge
+      // Le commentaire sera ajouté automatiquement via le listener realtime
+      
+      // ✅ Mettre à jour le statut en ligne après un court délai
+      setTimeout(() => updateOnlineStatus(), 100);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Une erreur inconnue est survenue');
     }
@@ -1434,41 +1637,48 @@ const Page = () => {
     setTimeout(() => setShowConfetti(false), CONFETTI_DURATION);
   };
 
-  // ✅ Mise à jour du statut en ligne
-  const updateOnlineStatus = async () => {
-    if (!user) return;
-    
-    const now = new Date().toISOString();
-    console.log('📝 Mise à jour last_seen:', now);
-    
-    try {
-      await supabase
-        .from('profiles')
-        .update({ last_seen: now })
-        .eq('id', user.id);
-      
-      console.log('✅ last_seen mis à jour dans la DB');
-      
-      // Mettre à jour localement partout où l'utilisateur actuel peut apparaître
+// ✅ Mise à jour du statut en ligne
+const updateOnlineStatus = async () => {
+  if (!user) return;
+
+  const now = new Date().toISOString();
+  console.log('📝 Mise à jour last_seen:', now);
+
+  try {
+    await supabase
+      .from('profiles')
+      .update({ last_seen: now })
+      .eq('id', user.id);
+
+    console.log('✅ last_seen mis à jour dans la DB');
+
+    // ✅ IMPORTANT : met à jour l'utilisateur local (sinon le header ne bouge pas)
+    setUser(prev => (prev ? { ...prev, last_seen: now } : prev));
+
+    // Mettre à jour localement partout où l'utilisateur actuel peut apparaître
+    // Mais différer pour éviter les conflits de rendu
+    setTimeout(() => {
       // Dans les messages publics
-      setMessages(prev => prev.map(msg => 
-        msg.user_id === user.id 
+      setMessages(prev => prev.map(msg =>
+        msg.user_id === user.id
           ? { ...msg, last_seen: now }
           : msg
       ));
-      
+
       // Dans le profil visionné (si on regarde son propre profil)
       if (viewingProfile && viewingProfile.id === user.id) {
-        setViewingProfile(prev => prev ? { ...prev, last_seen: now } : null);
+        setViewingProfile(prev => (prev ? { ...prev, last_seen: now } : null));
       }
-      
-      console.log('✅ État local mis à jour pour user actuel');
-      
-      lastActivityUpdate.current = Date.now();
-    } catch (err) {
-      console.error('❌ Erreur mise à jour last_seen:', err);
-    }
-  };
+    }, 0);
+
+    console.log('✅ État local mis à jour pour user actuel');
+
+    lastActivityUpdate.current = Date.now();
+  } catch (err) {
+    console.error('❌ Erreur mise à jour last_seen:', err);
+  }
+};
+
 
   // ✅ Mise à jour lors de l'activité utilisateur (throttled à 30 secondes)
   const handleUserActivity = useCallback(() => {
@@ -1484,35 +1694,32 @@ const Page = () => {
     }
   }, [user]);
 
-  // ✅ Mise à jour initiale au montage (arrivée sur le site)
-  useEffect(() => {
-    if (!user) return;
+// ✅ Mise à jour initiale au montage (arrivée sur le site)
+useEffect(() => {
+  if (!user?.id) return;
 
-    // Mise à jour immédiate au montage pour signaler qu'on est en ligne
-    console.log('🟢 Arrivée sur le site - Passage en ligne');
-    updateOnlineStatus();
-    
-    // Charger la liste des utilisateurs en ligne au démarrage
+  console.log('🟢 Arrivée sur le site - Passage en ligne');
+  updateOnlineStatus();
+
+  loadOnlineUsers();
+
+  const interval = setInterval(() => {
     loadOnlineUsers();
+  }, 5 * 1000);
 
-    // Recharger la liste toutes les 30 secondes pour détecter les utilisateurs qui passent offline
-    const interval = setInterval(() => {
-      loadOnlineUsers();
-    }, 30 * 1000);
+  const handleBeforeUnload = () => {
+    if (navigator.sendBeacon) {
+      navigator.sendBeacon(`/api/update-last-seen?userId=${user.id}`);
+    }
+  };
+  window.addEventListener('beforeunload', handleBeforeUnload);
 
-    // Beacon de déconnexion
-    const handleBeforeUnload = () => {
-      if (navigator.sendBeacon) {
-        navigator.sendBeacon(`/api/update-last-seen?userId=${user.id}`);
-      }
-    };
-    window.addEventListener('beforeunload', handleBeforeUnload);
+  return () => {
+    clearInterval(interval);
+    window.removeEventListener('beforeunload', handleBeforeUnload);
+  };
+}, [user?.id]);
 
-    return () => {
-      clearInterval(interval);
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-    };
-  }, [user]);
 
   // ✅ Event listeners pour l'activité utilisateur (clics et mouvements)
   useEffect(() => {
@@ -1527,7 +1734,7 @@ const Page = () => {
       window.removeEventListener('mousemove', handleUserActivity);
       window.removeEventListener('keydown', handleUserActivity);
     };
-  }, [user, handleUserActivity]);
+}, [user?.id, handleUserActivity]);
 
   const handleLogout = async () => {
     closeUserMenu();
@@ -1875,9 +2082,39 @@ const Page = () => {
   };
 
   const closeProfileModal = () => {
-    setShowProfileModal(false);
-    setViewingProfile(null);
-    setFriendshipStatus('none');
+    setClosingProfileModal(true);
+    setTimeout(() => {
+      setShowProfileModal(false);
+      setClosingProfileModal(false);
+      setViewingProfile(null);
+      setFriendshipStatus('none');
+    }, 200);
+  };
+
+  const closeFriendsModal = () => {
+    setClosingFriendsModal(true);
+    setTimeout(() => {
+      setShowFriendsModal(false);
+      setClosingFriendsModal(false);
+    }, 200);
+  };
+
+  const closeMessagesModal = () => {
+    setClosingMessagesModal(true);
+    setTimeout(() => {
+      setShowMessagesModal(false);
+      setClosingMessagesModal(false);
+      setActiveConversation(null);
+      setActiveConversationUser(null);
+    }, 200);
+  };
+
+  const closeOnlineUsersModal = () => {
+    setClosingOnlineUsersModal(true);
+    setTimeout(() => {
+      setShowOnlineUsersModal(false);
+      setClosingOnlineUsersModal(false);
+    }, 200);
   };
 
   // ✅ Charger la liste d'amis et les demandes
@@ -2286,17 +2523,6 @@ const Page = () => {
 
       if (error) throw error;
 
-      // Nettoyer une éventuelle entrée cachée afin de pouvoir supprimer à nouveau plus tard
-      const { error: unhideError } = await supabase
-        .from('hidden_conversations')
-        .delete()
-        .eq('user_id', user.id)
-        .eq('hidden_user_id', activeConversation);
-
-      if (unhideError) {
-        console.error('❌ Erreur nettoyage hidden_conversations:', unhideError);
-      }
-
       setPrivateMessages(prev => [...prev, data]);
 
       // Mettre à jour la conversation
@@ -2320,6 +2546,7 @@ const Page = () => {
             unreadCount: 0
           }, ...prev];
         }
+        return prev;
       });
     } catch (err) {
       console.error('❌ Erreur envoi message privé:', err);
@@ -2445,9 +2672,6 @@ const Page = () => {
     });
   };
 
-  // Log pour vérifier la valeur de user?.last_seen
-  console.log('🔍 Header user.last_seen:', user);
-
   if (!isAuthenticated) {
     return (
       <LoginRegister
@@ -2496,14 +2720,14 @@ const Page = () => {
       )}
 
       {/* ✅ Modale de profil utilisateur */}
-      {showProfileModal && (
+      {(showProfileModal || closingProfileModal) && (
         <div 
-          className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] animate-fade-in"
+          className={`fixed inset-0 bg-black/50 flex items-center justify-center z-[100] ${closingProfileModal ? 'animate-fade-out' : 'animate-fade-in'}`}
           onClick={closeProfileModal}
         >
           <div 
             ref={profileModalRef}
-            className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 animate-scale-in"
+            className={`bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 ${closingProfileModal ? 'animate-fade-out' : 'animate-scale-in'}`}
             onClick={(e) => e.stopPropagation()}
           >
             {loadingProfile ? (
@@ -2544,8 +2768,8 @@ const Page = () => {
                       </div>
                     )}
                     {viewingProfile.id !== user?.id && (
-                      <div className="absolute bottom-1 right-1">
-                        <OnlineStatusIndicator lastSeen={viewingProfile.last_seen} size="lg" showOfflineAsOrange={true} />
+                      <div className="absolute bottom-0 right-0">
+                        <OnlineStatusIndicator lastSeen={viewingProfile.last_seen} size="lg" showOfflineAsOrange={true} className="border-2 border-white" />
                       </div>
                     )}
                   </div>
@@ -2672,13 +2896,13 @@ const Page = () => {
       )}
 
       {/* ✅ Modale liste d'amis */}
-      {showFriendsModal && (
+      {(showFriendsModal || closingFriendsModal) && (
         <div 
-          className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] animate-fade-in"
-          onClick={() => setShowFriendsModal(false)}
+          className={`fixed inset-0 bg-black/50 flex items-center justify-center z-[100] ${closingFriendsModal ? 'animate-fade-out' : 'animate-fade-in'}`}
+          onClick={closeFriendsModal}
         >
           <div 
-            className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 max-h-[80vh] overflow-hidden animate-scale-in"
+            className={`bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 max-h-[80vh] overflow-hidden ${closingFriendsModal ? 'animate-fade-out' : 'animate-scale-in'}`}
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
@@ -2688,8 +2912,8 @@ const Page = () => {
                 <span>Mes amis</span>
               </h2>
               <button
-                onClick={() => setShowFriendsModal(false)}
-                className="text-white hover:bg-white/20 p-2 rounded-lg transition-colors"
+                onClick={closeFriendsModal}
+                className="text-white/80 hover:text-white transition-colors"
               >
                 <FaTimes size={20} />
               </button>
@@ -2709,7 +2933,7 @@ const Page = () => {
                         <div 
                           className="flex items-center space-x-3 cursor-pointer"
                           onClick={() => {
-                            setShowFriendsModal(false);
+                            closeFriendsModal();
                             handleViewProfile(request.requester_id);
                           }}
                         >
@@ -2734,7 +2958,7 @@ const Page = () => {
                           </button>
                           <button
                             onClick={() => rejectFriendRequest(request.id)}
-                            className="p-2 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition-colors"
+                            className="p-2 bg-red-100 text-red-500 rounded-lg hover:bg-red-200 transition-colors"
                           >
                             <FaTimes size={12} />
                           </button>
@@ -2759,7 +2983,7 @@ const Page = () => {
                         key={friend.id} 
                         className="flex items-center justify-between p-3 rounded-xl hover:bg-gray-50 transition-colors cursor-pointer"
                         onClick={() => {
-                          setShowFriendsModal(false);
+                          closeFriendsModal();
                           handleViewProfile(friend.id);
                         }}
                       >
@@ -2776,7 +3000,7 @@ const Page = () => {
                               </div>
                             )}
                             <div className="absolute bottom-0 right-0">
-                              <OnlineStatusIndicator lastSeen={friend.last_seen} size="md" showOfflineAsOrange={true} />
+                              <OnlineStatusIndicator lastSeen={friend.last_seen} size="md" showOfflineAsOrange={true} className="border-2 border-white" />
                             </div>
                           </div>
                           <div>
@@ -2790,7 +3014,7 @@ const Page = () => {
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              setShowFriendsModal(false);
+                              closeFriendsModal();
                               setShowMessagesModal(true);
                               openConversation({
                                 id: friend.id,
@@ -2803,7 +3027,7 @@ const Page = () => {
                             className="p-2 text-gray-400 hover:text-purple-500 hover:bg-purple-50 rounded-lg transition-colors"
                             title="Envoyer un message"
                           >
-                            <FaEnvelope size={16} />
+                            <FaEnvelope size={14} />
                           </button>
                           <button
                             onClick={(e) => {
@@ -2813,7 +3037,7 @@ const Page = () => {
                             className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
                             title="Retirer des amis"
                           >
-                            <FaUserMinus size={16} />
+                            <FaUserMinus size={14} />
                           </button>
                         </div>
                       </div>
@@ -2834,13 +3058,13 @@ const Page = () => {
 
       {/* ✅ Modale Messages privés */}
       {/* Modal Utilisateurs en ligne */}
-      {showOnlineUsersModal && (
+      {(showOnlineUsersModal || closingOnlineUsersModal) && (
         <div 
-          className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] animate-fade-in"
-          onClick={() => setShowOnlineUsersModal(false)}
+          className={`fixed inset-0 bg-black/50 flex items-center justify-center z-[100] ${closingOnlineUsersModal ? 'animate-fade-out' : 'animate-fade-in'}`}
+          onClick={closeOnlineUsersModal}
         >
           <div 
-            className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 max-h-[80vh] overflow-hidden animate-scale-in"
+            className={`bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 max-h-[80vh] overflow-hidden ${closingOnlineUsersModal ? 'animate-fade-out' : 'animate-scale-in'}`}
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
@@ -2850,7 +3074,7 @@ const Page = () => {
                 <h2 className="text-xl font-bold text-white">Utilisateurs en ligne</h2>
               </div>
               <button
-                onClick={() => setShowOnlineUsersModal(false)}
+                onClick={closeOnlineUsersModal}
                 className="text-white hover:bg-white/20 p-2 rounded-lg transition-colors duration-200"
               >
                 <FaTimes size={20} />
@@ -2878,7 +3102,7 @@ const Page = () => {
                       <div className="flex items-center justify-between">
                         <div className="flex items-center space-x-3 flex-1 cursor-pointer group" onClick={() => {
                           handleViewProfile(onlineUser.id);
-                          setShowOnlineUsersModal(false);
+                          closeOnlineUsersModal();
                         }}>
                           {/* Avatar */}
                           <div className="relative">
@@ -2947,17 +3171,13 @@ const Page = () => {
         </div>
       )}
 
-      {showMessagesModal && (
+      {(showMessagesModal || closingMessagesModal) && (
         <div 
-          className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] animate-fade-in"
-          onClick={() => {
-            setShowMessagesModal(false);
-            setActiveConversation(null);
-            setActiveConversationUser(null);
-          }}
+          className={`fixed inset-0 bg-black/50 flex items-center justify-center z-[100] ${closingMessagesModal ? 'animate-fade-out' : 'animate-fade-in'}`}
+          onClick={closeMessagesModal}
         >
           <div 
-            className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 max-h-[85vh] overflow-hidden animate-scale-in flex flex-col"
+            className={`bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 max-h-[85vh] overflow-hidden animate-scale-in flex flex-col ${closingMessagesModal ? 'animate-fade-out' : ''}`}
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
@@ -2984,14 +3204,14 @@ const Page = () => {
                         />
                       ) : (
                         <div 
-                          className="w-10 h-10 rounded-full flex items-center justify-center text-white text-3xl font-bold border-2 border-white/30"
-                          style={{ backgroundColor: activeConversationUser.color || '#3B82F6' }}
+                          className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold"
+                          style={{ backgroundColor: activeConversationUser.color }}
                         >
-                          {(activeConversationUser.username || 'U')[0].toUpperCase()}
+                          {activeConversationUser.username[0].toUpperCase()}
                         </div>
                       )}
                       <div className="absolute bottom-0 right-0">
-                        <OnlineStatusIndicator lastSeen={activeConversationUser.last_seen} size="sm" showOfflineAsOrange={true} />
+                        <OnlineStatusIndicator lastSeen={activeConversationUser.last_seen} size="sm" showOfflineAsOrange={true} className="border-2 border-white" />
                       </div>
                     </div>
                     <span className="text-white font-semibold">{activeConversationUser.username}</span>
@@ -3004,11 +3224,7 @@ const Page = () => {
                 </h2>
               )}
               <button
-                onClick={() => {
-                  setShowMessagesModal(false);
-                  setActiveConversation(null);
-                  setActiveConversationUser(null);
-                }}
+                onClick={closeMessagesModal}
                 className="text-white/80 hover:text-white transition-colors"
               >
                 <FaTimes size={20} />
@@ -3026,10 +3242,10 @@ const Page = () => {
                       <div className="w-8 h-8 border-4 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
                     </div>
                   ) : privateMessages.length === 0 ? (
-                    <div className="text-center py-12 text-gray-500">
-                      <FaEnvelope className="mx-auto mb-3 text-gray-300" size={48} />
+                    <div className="text-center py-8 text-gray-500">
+                      <FaEnvelope className="mx-auto mb-3 text-gray-300" size={40} />
                       <p>Aucun message pour le moment</p>
-                      <p className="text-sm text-gray-400 mt-1">Envoyez le premier message !</p>
+                      <p className="text-sm mt-1">Envoyez le premier message !</p>
                     </div>
                   ) : (
                     privateMessages.map((msg) => (
@@ -3053,15 +3269,8 @@ const Page = () => {
                             />
                           )}
                           {msg.message && msg.message !== '📷 Image' && (
-                            <p className="text-gray-800 leading-relaxed mb-2">
-                              {msg.message}
-                              {msg.edited && (
-                                <span className="text-xs text-gray-500 ml-2">(modifié)</span>
-                              )}
-                            </p>
+                            <p className={`break-words ${msg.image_url ? 'px-3 py-1' : ''}`}>{msg.message}</p>
                           )}
-                          
-                          {/* Date et heure */}
                           <p className={`text-xs mt-1 ${msg.image_url ? 'px-3 pb-1' : ''} ${msg.sender_id === user?.id ? 'text-purple-200' : 'text-gray-400'}`}>
                             {new Date(msg.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
                           </p>
@@ -3145,10 +3354,18 @@ const Page = () => {
                       className="flex-1 px-4 py-2 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100"
                     />
                     <button
-                      type="submit"
-                      className="flex-1 bg-purple-500 text-white py-3 px-6 rounded-lg hover:bg-purple-600 transition-all duration-200 font-medium shadow-md hover:shadow-lg"
+                      onClick={() => {
+                        stopPrivateTyping();
+                        sendPrivateMessage();
+                      }}
+                      disabled={(!newPrivateMessage.trim() && !privateImageFile) || sendingPrivateImage}
+                      className="p-3 bg-purple-500 text-white rounded-full hover:bg-purple-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                     >
-                      Envoyer le message
+                      {sendingPrivateImage ? (
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      ) : (
+                        <FaPaperPlane size={16} />
+                      )}
                     </button>
                   </div>
                 </div>
@@ -3196,7 +3413,7 @@ const Page = () => {
                                 className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold"
                                 style={{ backgroundColor: conv.odColor }}
                               >
-                                {(conv.odUsername || 'U')[0].toUpperCase()}
+                                {conv.odUsername[0].toUpperCase()}
                               </div>
                             )}
                             <div className="absolute bottom-0 right-0">
@@ -3263,7 +3480,7 @@ const Page = () => {
             <div className="relative" ref={userMenuRef}>
               <button
                 onClick={() => setShowUserMenu(!showUserMenu)}
-                className="flex items-center space-x-3 text-white px-4 py-2 rounded-lg hover:opacity-90 transition-all duration-200 shadow-md hover:shadow-lg"
+                className="relative flex items-center space-x-3 text-white px-4 py-2 rounded-lg hover:opacity-90 transition-all duration-200 shadow-md hover:shadow-lg"
                 style={{ backgroundColor: user?.color || '#3B82F6' }}
               >
                 {user?.avatar_url ? (
@@ -3274,12 +3491,15 @@ const Page = () => {
                       className="w-8 h-8 rounded-full object-cover border-2 border-white"
                     />
                     <div className="absolute bottom-0 right-0">
-                      <OnlineStatusIndicator lastSeen={user?.last_seen} size="sm" showOfflineAsOrange={true} />
+                      <OnlineStatusIndicator lastSeen={user?.last_seen} size="sm" className="border-2 border-white" showOfflineAsOrange={true}  />
                     </div>
                   </div>
                 ) : (
-                  <div className="bg-white rounded-full p-2">
+                  <div className="relative bg-white rounded-full p-2">
                     <FaUser style={{ color: user?.color || '#3B82F6' }} size={16} />
+                    <div className="absolute bottom-0 right-0">
+                      <OnlineStatusIndicator lastSeen={user?.last_seen} size="sm" className="border-2 border-white" showOfflineAsOrange={true} />
+                    </div>
                   </div>
                 )}
                 <span className="font-medium">{user?.name}</span>
@@ -3561,11 +3781,9 @@ const Page = () => {
             >
               <FaUsers className="text-green-500" size={18} />
               <span className="font-medium text-gray-700 hidden sm:inline">En ligne</span>
-              {onlineUsers.length > 0 && (
-                <span className="absolute -top-2 -right-2 bg-green-500 text-white text-xs w-5 h-5 flex items-center justify-center rounded-full">
-                  {onlineUsers.length}
-                </span>
-              )}
+              <span className={`absolute -top-2 -right-2 bg-green-500 text-white text-xs w-5 h-5 flex items-center justify-center rounded-full transition-all duration-5000 ${onlineUsers.length > 0 ? 'opacity-100 scale-100' : 'opacity-0 scale-0'}`}>
+                <CountUp key={onlineUsers.length} end={onlineUsers.length} duration={0.5} />
+              </span>
             </button>
           </div>
           
@@ -3610,7 +3828,7 @@ const Page = () => {
                   <img 
                     src={imagePreview} 
                     alt="Preview" 
-                    className="h-20 w-auto rounded-lg object-cover"
+                    className="max-w-xs max-h-48 rounded-lg border-2 border-gray-300"
                   />
                   <button
                     type="button"
@@ -3708,7 +3926,7 @@ const Page = () => {
             <div className="space-y-4">
               {messages.map((item, index) => (
                 <div 
-                  key={item.id} 
+                  key={`message-${item.id}`} 
                   className="bg-white p-6 rounded-2xl shadow-md hover:shadow-xl transition-all duration-500 ease-out border-l-4"
                   style={{ 
                     opacity: 0,
@@ -3843,8 +4061,8 @@ const Page = () => {
                     </div>
                   </div>
 
-                  {commentingMessageId === item.id && (
-                    <div className="mt-6 pt-6 border-t border-gray-200 animate-fade-in">
+                  {(commentingMessageId === item.id || closingMessageId === item.id) && (
+                    <div className={`mt-6 pt-6 border-t border-gray-200 ${closingMessageId === item.id ? 'animate-fade-out' : 'animate-fade-in'}`}>
                       {loadingComments[item.id] ? (
                         <p className="text-gray-400 text-sm mb-4 animate-pulse flex items-center space-x-2">
                           <span>💬</span>
@@ -3855,7 +4073,7 @@ const Page = () => {
                           {(commentairesByMessage[item.id] || []).length > 0 ? (
                             (commentairesByMessage[item.id] || []).map((commentaire, idx) => (
                               <div 
-                                key={commentaire.id} 
+                                key={`comment-${commentaire.id}`} 
                                 className="bg-gray-50 p-4 rounded-lg transition-all duration-300 ease-out border-l-4"
                                 style={{
                                   opacity: 0,
@@ -3916,6 +4134,8 @@ const Page = () => {
                       </form>
                     </div>
                   )}
+                  {/* ✅ Référence pour scroll automatique des commentaires */}
+                  <div ref={commentsEndRef} />
                 </div>
               ))}
               {/* ✅ Référence pour scroll automatique */}
