@@ -1,0 +1,2 @@
+export const ONLINE_THRESHOLD_SECONDS = 300; // Seuil d'inactivité pour considérer un utilisateur comme en ligne (en secondes) — 300s = 5min
+export const ONLINE_THRESHOLD_MS = ONLINE_THRESHOLD_SECONDS * 1000;

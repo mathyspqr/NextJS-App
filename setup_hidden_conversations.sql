@@ -23,6 +23,12 @@ CREATE POLICY "Users can insert own hidden conversations"
   ON hidden_conversations FOR INSERT
   WITH CHECK (auth.uid() = user_id);
 
+-- Politique: les utilisateurs peuvent mettre à jour leurs propres entrées
+CREATE POLICY "Users can update own hidden conversations"
+  ON hidden_conversations FOR UPDATE
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
 -- Politique: les utilisateurs peuvent supprimer leurs propres entrées
 CREATE POLICY "Users can delete own hidden conversations"
   ON hidden_conversations FOR DELETE

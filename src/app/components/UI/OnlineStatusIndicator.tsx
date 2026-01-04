@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { ONLINE_THRESHOLD_SECONDS } from '../../constants/onlineStatus';
 
 interface OnlineStatusIndicatorProps {
   lastSeen: string | null | undefined;
@@ -22,8 +23,8 @@ const OnlineStatusIndicator = ({
     const now = new Date();
     const diffInSeconds = (now.getTime() - lastSeenDate.getTime()) / 1000;
     
-    // Seuil à 5 minutes (300 secondes)
-    return diffInSeconds <= 300 ? 'online' : 'offline';
+    // Seuil configurable (en secondes)
+    return diffInSeconds <= ONLINE_THRESHOLD_SECONDS ? 'online' : 'offline';
   }, [lastSeen]);
 
   const [status, setStatus] = useState<'online' | 'offline'>(getStatus());
@@ -65,7 +66,7 @@ const OnlineStatusIndicator = ({
     : showOfflineAsOrange ? 'bg-orange-500' : 'bg-red-500';
 
   const statusText = status === 'online' 
-    ? 'En ligne (actif dans les 5 dernières minutes)' 
+    ? `En ligne (actif dans les ${ONLINE_THRESHOLD_SECONDS} dernières secondes)` 
     : 'Hors ligne';
 
   // Ajout d'un log pour diagnostiquer les valeurs de lastSeen et du statut
