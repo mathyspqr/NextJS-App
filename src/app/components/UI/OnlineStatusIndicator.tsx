@@ -31,11 +31,14 @@ const OnlineStatusIndicator = ({
   // Recalculer le statut toutes les 5 secondes pour une mise à jour rapide
   useEffect(() => {
     const updateStatus = () => {
-      const newStatus = getStatus();
-      if (newStatus !== status) {
-        console.log('🔄 Changement de statut:', status, '→', newStatus, 'lastSeen:', lastSeen);
-        setStatus(newStatus);
-      }
+      setStatus(prev => {
+        const newStatus = getStatus();
+        if (newStatus !== prev) {
+          console.log('🔄 Changement de statut:', prev, '→', newStatus, 'lastSeen:', lastSeen);
+          return newStatus;
+        }
+        return prev;
+      });
     };
 
     // Mettre à jour immédiatement quand lastSeen change
