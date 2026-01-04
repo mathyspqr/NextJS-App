@@ -6,7 +6,6 @@ import Confetti from 'react-confetti';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import CountUp from 'react-countup';
-import Image from 'next/image';
 
 import LoginRegister from './LoginRegister';
 import { createClient } from '../app/utils/supabase/client';
@@ -733,52 +732,6 @@ const Page = () => {
     };
   }, [isAuthenticated, user]);
 
-  // ✅ Charger les utilisateurs en ligne
-  const loadOnlineUsers = async () => {
-    if (!user) return;
-    setLoadingOnlineUsers(true);
-
-    try {
-      // Récupérer tous les utilisateurs en ligne (actifs dans les 5 dernières minutes)
-      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
-      
-      // Récupérer les IDs de tous les amis
-      const { data: friendships } = await supabase
-        .from('friendships')
-        .select('requester_id, addressee_id, status')
-        .or(`requester_id.eq.${user.id},addressee_id.eq.${user.id}`)
-        .eq('status', 'accepted');
-      
-      // Créer un Set des IDs d'amis
-      const friendIds = new Set<string>();
-      friendships?.forEach(f => {
-        friendIds.add(f.requester_id === user.id ? f.addressee_id : f.requester_id);
-      });
-      
-      // Récupérer tous les utilisateurs en ligne sauf soi-même
-      const { data: users, error } = await supabase
-        .from('profiles')
-        .select('id, username, color, avatar_url, bio, last_seen')
-        .gte('last_seen', fiveMinutesAgo)
-        .neq('id', user.id);
-
-      if (error) throw error;
-
-      // Ajouter l'info si c'est un ami
-      const usersWithFriendStatus = (users || []).map(u => ({
-        ...u,
-        isFriend: friendIds.has(u.id)
-      }));
-
-      setOnlineUsers(usersWithFriendStatus);
-    } catch (err) {
-      console.error('❌ Erreur chargement utilisateurs en ligne:', err);
-      toast.error('Erreur lors du chargement des utilisateurs');
-    } finally {
-      setLoadingOnlineUsers(false);
-    }
-  };
-
   // ✅ Realtime - Statut en ligne (last_seen) en temps réel
   useEffect(() => {
     if (!isAuthenticated || !user) return;
@@ -865,7 +818,7 @@ const Page = () => {
     return () => {
       supabase.removeChannel(onlineStatusChannel);
     };
-  }, [isAuthenticated, user, activeConversationUser, viewingProfile, loadOnlineUsers]);
+  }, [isAuthenticated, user, activeConversationUser, viewingProfile]);
 
   // ✅ Realtime - Changements de profil en temps réel
   useEffect(() => {
@@ -1003,7 +956,7 @@ const Page = () => {
   // ✅ Garder la ref à jour pour le Realtime
   useEffect(() => {
     activeConversationRef.current = activeConversation;
-  }, [activeConversation, activeConversationUser, viewingProfile]);
+  }, [activeConversation]);
 
   // ✅ Realtime pour les messages privés
   useEffect(() => {
@@ -1664,7 +1617,7 @@ const Page = () => {
       }
 
       // ✅ Récupérer l'ID du nouveau commentaire
-      // const newCommentData = await response.json();
+      const newCommentData = await response.json();
 
       toast.info('💬 Commentaire ajouté !', { autoClose: CONFETTI_DURATION });
       setNewComment('');
@@ -1739,7 +1692,7 @@ const updateOnlineStatus = async () => {
       console.log('🖱️ Activité détectée - Mise à jour du statut');
       updateOnlineStatus();
     }
-  }, [user, updateOnlineStatus]);
+  }, [user]);
 
 // ✅ Mise à jour initiale au montage (arrivée sur le site)
 useEffect(() => {
@@ -1765,7 +1718,7 @@ useEffect(() => {
     clearInterval(interval);
     window.removeEventListener('beforeunload', handleBeforeUnload);
   };
-}, [user?.id, updateOnlineStatus, loadOnlineUsers]);
+}, [user?.id]);
 
 
   // ✅ Event listeners pour l'activité utilisateur (clics et mouvements)
@@ -1781,7 +1734,7 @@ useEffect(() => {
       window.removeEventListener('mousemove', handleUserActivity);
       window.removeEventListener('keydown', handleUserActivity);
     };
-}, [user?.id, handleUserActivity, user]);
+}, [user?.id, handleUserActivity]);
 
   const handleLogout = async () => {
     closeUserMenu();
@@ -2237,6 +2190,52 @@ useEffect(() => {
     }
   };
 
+  // ✅ Charger les utilisateurs en ligne
+  const loadOnlineUsers = async () => {
+    if (!user) return;
+    setLoadingOnlineUsers(true);
+
+    try {
+      // Récupérer tous les utilisateurs en ligne (actifs dans les 5 dernières minutes)
+      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+      
+      // Récupérer les IDs de tous les amis
+      const { data: friendships } = await supabase
+        .from('friendships')
+        .select('requester_id, addressee_id, status')
+        .or(`requester_id.eq.${user.id},addressee_id.eq.${user.id}`)
+        .eq('status', 'accepted');
+      
+      // Créer un Set des IDs d'amis
+      const friendIds = new Set<string>();
+      friendships?.forEach(f => {
+        friendIds.add(f.requester_id === user.id ? f.addressee_id : f.requester_id);
+      });
+      
+      // Récupérer tous les utilisateurs en ligne sauf soi-même
+      const { data: users, error } = await supabase
+        .from('profiles')
+        .select('id, username, color, avatar_url, bio, last_seen')
+        .gte('last_seen', fiveMinutesAgo)
+        .neq('id', user.id);
+
+      if (error) throw error;
+
+      // Ajouter l'info si c'est un ami
+      const usersWithFriendStatus = (users || []).map(u => ({
+        ...u,
+        isFriend: friendIds.has(u.id)
+      }));
+
+      setOnlineUsers(usersWithFriendStatus);
+    } catch (err) {
+      console.error('❌ Erreur chargement utilisateurs en ligne:', err);
+      toast.error('Erreur lors du chargement des utilisateurs');
+    } finally {
+      setLoadingOnlineUsers(false);
+    }
+  };
+
   // ✅ Envoyer une demande d'ami
   const sendFriendRequest = async (targetUserId: string) => {
     if (!user) return;
@@ -2329,6 +2328,12 @@ useEffect(() => {
       console.error('❌ Erreur suppression ami:', err);
       toast.error('Erreur lors de la suppression');
     }
+  };
+
+  // ✅ Ouvrir la modale amis
+  const openFriendsModal = () => {
+    setShowFriendsModal(true);
+    loadFriends();
   };
 
   // ✅ Charger les conversations
@@ -2695,15 +2700,12 @@ useEffect(() => {
           >
             <FaTimes size={24} />
           </button>
-          <div className="relative max-w-[90vw] max-h-[90vh]">
-            <Image 
-              src={lightboxImage} 
-              alt="Image en grand" 
-              fill
-              className="object-contain rounded-lg shadow-2xl animate-scale-in"
-              onClick={(e) => e.stopPropagation()}
-            />
-          </div>
+          <img 
+            src={lightboxImage} 
+            alt="Image en grand" 
+            className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg shadow-2xl animate-scale-in"
+            onClick={(e) => e.stopPropagation()}
+          />
           <a
             href={lightboxImage}
             target="_blank"
