@@ -2766,19 +2766,16 @@ useEffect(() => {
         localAudioTrack.onunmute = () => console.log("🎙️ Local audio track unmuted");
         localAudioTrack.onended = () => console.log("🎙️ Local audio track ended");
 
-        pc.addTransceiver(localAudioTrack, { direction: 'sendrecv' });
+        pc.addTransceiver(localAudioTrack, { direction: 'sendonly' });
         console.log("🎙️ Transceiver added successfully");
         
         // Vérifier les transceivers après ajout
         const transceivers = pc.getTransceivers();
         console.log("🎙️ Total transceivers:", transceivers.length);
         transceivers.forEach((t, i) => {
-          console.log(`🎙️ Transceiver ${i}: direction=${t.direction}, currentDirection=${t.currentDirection}, mid=${t.mid}`);
+          console.log(`🎙️ Transceiver ${i}: direction=${t.direction}, mid=${t.mid}`);
           if (t.sender && t.sender.track) {
-            console.log(`🎙️ Transceiver ${i} sender track: ${t.sender.track.kind}, enabled=${t.sender.track.enabled}, readyState=${t.sender.track.readyState}`);
-          }
-          if (t.receiver && t.receiver.track) {
-            console.log(`🎙️ Transceiver ${i} receiver track: ${t.receiver.track.kind}, enabled=${t.receiver.track.enabled}, readyState=${t.receiver.track.readyState}`);
+            console.log(`🎙️ Transceiver ${i} sender track: ${t.sender.track.kind}, enabled=${t.sender.track.enabled}`);
           }
         });
       } else {
@@ -2792,15 +2789,10 @@ useEffect(() => {
         console.log("🎧 Remote track settings:", event.track.getSettings());
         
         // Vérifier les transceivers pour les tracks distants
-        const allTransceivers = pc.getTransceivers();
-        console.log("🎧 After receiving remote track - All transceivers:");
-        allTransceivers.forEach((t, i) => {
-          console.log(`🎧 Transceiver ${i}: direction=${t.direction}, currentDirection=${t.currentDirection}`);
-          if (t.sender && t.sender.track) {
-            console.log(`🎧 Sender track ${i}: ${t.sender.track.kind}, enabled=${t.sender.track.enabled}, readyState=${t.sender.track.readyState}`);
-          }
+        const transceivers = pc.getTransceivers();
+        transceivers.forEach((t, i) => {
           if (t.receiver && t.receiver.track) {
-            console.log(`🎧 Receiver track ${i}: ${t.receiver.track.kind}, enabled=${t.receiver.track.enabled}, readyState=${t.receiver.track.readyState}`);
+            console.log(`🎧 Transceiver ${i} receiver track: ${t.receiver.track.kind}, enabled=${t.receiver.track.enabled}, readyState=${t.receiver.track.readyState}`);
           }
         });
 
@@ -2986,13 +2978,6 @@ useEffect(() => {
         audioTracks.forEach((track, i) => {
           console.log(`📤 Track ${i}: enabled=${track.enabled}, readyState=${track.readyState}, muted=${track.muted}`);
         });
-        
-        // Vérifier les transceivers
-        const transceivers = pc.getTransceivers();
-        console.log("📤 Before offer - Transceivers:");
-        transceivers.forEach((t, i) => {
-          console.log(`📤 Transceiver ${i}: direction=${t.direction}, currentDirection=${t.currentDirection}`);
-        });
       }
 
       const pc = pcRef.current!;
@@ -3066,16 +3051,6 @@ console.log('📤 Local description set for answer in accept');
     audioTracks.forEach((track, i) => {
       console.log(`📤 Track ${i}: enabled=${track.enabled}, readyState=${track.readyState}, muted=${track.muted}`);
     });
-    
-    // Vérifier les transceivers
-    const pc = pcRef.current;
-    if (pc) {
-      const transceivers = pc.getTransceivers();
-      console.log("📤 Before answer - Transceivers:");
-      transceivers.forEach((t, i) => {
-        console.log(`📤 Transceiver ${i}: direction=${t.direction}, currentDirection=${t.currentDirection}`);
-      });
-    }
   }
 
   console.log('📤 Envoi answer depuis accept');
