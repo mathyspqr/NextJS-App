@@ -1883,7 +1883,7 @@ useEffect(() => {
       window.removeEventListener('mousemove', handleUserActivity);
       window.removeEventListener('keydown', handleUserActivity);
     };
-}, [user?.id, handleUserActivity]);
+}, [user?.id, handleUserActivity, user]);
 
 // ✅ Realtime broadcast listener pour 'user_active' (activité utilisateur instantanée)
 useEffect(() => {
@@ -1931,7 +1931,7 @@ useEffect(() => {
   return () => {
     supabase.removeChannel(activityChannel);
   };
-}, [isAuthenticated, user, activeConversationUser, viewingProfile]);
+}, [isAuthenticated, user, activeConversationUser, viewingProfile, loadOnlineUsers]);
 
   const handleLogout = async () => {
     closeUserMenu();
@@ -2776,7 +2776,7 @@ useEffect(() => {
 
 console.log("🎤 local track:", {
   enabled: track.enabled,
-  muted: (track as any).muted,
+  muted: track.muted,
   readyState: track.readyState,
   label: track.label,
 });
@@ -2837,7 +2837,7 @@ pc.ontrack = async (event) => {
 console.log("🎚️ remote audio tracks:", rTracks.map(t => ({
   id: t.id,
   enabled: t.enabled,
-  muted: (t as any).muted,
+  muted: t.muted,
   readyState: t.readyState,
   label: t.label
 })));
