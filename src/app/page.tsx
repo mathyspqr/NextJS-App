@@ -1978,7 +1978,7 @@ useEffect(() => {
       setIsUpdatingColor(true);
       
       // ✅ Mettre à jour la couleur dans la table profiles
-      const { data: updateData, error } = await supabase
+      const { data: _, error } = await supabase
         .from('profiles')
         .update({ color: editingColor })
         .eq('id', user.id)
