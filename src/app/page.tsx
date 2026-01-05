@@ -2856,11 +2856,12 @@ console.log("🎚️ remote audio tracks:", rTracks.map(t => ({
 
 
 
-      // Add local track(s)
-      localStreamRef.current.getTracks().forEach(track => {
-        pc.addTrack(track, localStreamRef.current!);
-        console.log("➕ Added local track to PC:", track.kind, track.label, track.enabled);
-      });
+      // Add local track(s) using transceiver
+      const audioTrack = localStreamRef.current.getAudioTracks()[0];
+      if (audioTrack) {
+        const transceiver = pc.addTransceiver(audioTrack, { direction: 'sendrecv' });
+        console.log("➕ Added audio transceiver with track:", audioTrack.label, audioTrack.enabled);
+      }
 
       // Log transceivers after adding tracks
       console.log("📡 Transceivers after adding tracks:", pc.getTransceivers().map(t => ({
