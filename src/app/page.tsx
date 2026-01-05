@@ -360,7 +360,6 @@ const Page = () => {
           
           const userColor = profile?.color || '#3B82F6';
           const avatarUrl = profile?.avatar_url;
-          console.log('🎨 Message', message.id, 'user', message.user_id, 'couleur:', userColor);
           
           return {
             ...message,
@@ -375,7 +374,6 @@ const Page = () => {
       );
 
       setMessages(messagesWithLikesAndColors);
-      console.log('Messages fetched:', messagesWithLikesAndColors);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Une erreur inconnue est survenue');
     } finally {
@@ -401,14 +399,7 @@ const Page = () => {
           table: 'messages'
         },
         async (payload) => {
-          console.log('📨 Nouveau message reçu via Realtime:', payload);
           const newMsg = payload.new as Message & { user_id: string };
-          console.log('🔍 Données du nouveau message:', {
-            id: newMsg.id,
-            message: newMsg.message,
-            image_url: newMsg.image_url,
-            user_id: newMsg.user_id
-          });
           
           // ✅ Récupérer le username depuis la table profiles avec le user_id
           const { data: profile } = await supabase
@@ -420,26 +411,11 @@ const Page = () => {
           const username = profile?.username || 'Utilisateur';
           const userColor = profile?.color || '#3B82F6';
           const avatarUrl = profile?.avatar_url;
-          
-          // ✅ Notification si le message n'est pas de l'utilisateur actuel
-          if (newMsg.user_id !== user?.id) {
-            const notifText = newMsg.image_url 
-              ? `📨 ${username} a envoyé une image`
-              : `📨 Nouveau message de ${username}`;
-            toast.info(notifText, {
-              autoClose: 3000,
-              position: 'top-right'
-            });
-          }
-
-          console.log('✅ Ajout du message avec image_url:', newMsg.image_url);
 
           // ✅ Ajouter le message à la liste avec le username et la couleur
           setMessages(prev => {
-            // ✅ Vérifier si le message n'existe pas déjà (éviter les doublons)
             const exists = prev.some(msg => msg.id === newMsg.id);
             if (exists) {
-              console.log('⚠️ Message déjà présent, ignoré');
               return prev;
             }
 
@@ -467,7 +443,6 @@ const Page = () => {
           table: 'messages'
         },
         async (payload) => {
-          console.log('✏️ Message modifié via Realtime:', payload);
           const updated = payload.new as Message & { user_id: string };
 
           // Récupérer le username/couleur si elles ne sont pas dans le payload
@@ -502,7 +477,6 @@ const Page = () => {
           table: 'messages'
         },
         (payload) => {
-          console.log('🗑️ Message supprimé via Realtime:', payload);
           const deletedId = payload.old.id;
           setMessages(prev => prev.filter(msg => msg.id !== deletedId));
         }
@@ -534,8 +508,6 @@ const Page = () => {
           table: 'comments'
         },
         async (payload) => {
-          console.log('📨 Nouveau commentaire reçu via Realtime:', payload);
-          console.log('📨 User actuel:', user.id, user.name);
           const newComment = payload.new as Commentaire & { user_id: string };
           
           // ✅ Récupérer le username et la couleur depuis la table profiles
@@ -548,34 +520,13 @@ const Page = () => {
           const username = profile?.username || 'Utilisateur';
           const userColor = profile?.color || '#3B82F6';
           const avatarUrl = profile?.avatar_url;
-          
-          console.log('✅ Commentaire traité:', { 
-            id: newComment.id, 
-            message_id: newComment.message_id,
-            username,
-            commentaire: newComment.commentaire,
-            isCurrentUser: newComment.user_id === user?.id
-          });
-
-          // ✅ Notification si le commentaire n'est pas de l'utilisateur actuel
-          if (newComment.user_id !== user?.id) {
-            console.log('🔔 Affichage notification pour commentaire de:', username);
-            toast.info(`📨 Nouveau commentaire de ${username}`, {
-              autoClose: 2500,
-              position: 'top-right'
-            });
-          } else {
-            console.log('⏭️ Pas de notification, c\'est mon propre commentaire');
-          }
 
           // ✅ Ajouter le commentaire à la liste du bon message
           setCommentairesByMessage(prev => {
             const currentComments = prev[newComment.message_id] || [];
             
-            // ✅ Vérifier si le commentaire n'existe pas déjà (éviter les doublons)
             const exists = currentComments.some(c => c.id === newComment.id);
             if (exists) {
-              console.log('⚠️ Commentaire déjà présent, ignoré');
               return prev;
             }
 
@@ -595,7 +546,6 @@ const Page = () => {
               ]
             };
             
-            console.log('✅ Commentaires mis à jour pour message', newComment.message_id, ':', updated[newComment.message_id]);
             return updated;
           });
         }
@@ -674,7 +624,6 @@ const Page = () => {
           filter: `addressee_id=eq.${user.id}`
         },
         async (payload) => {
-          console.log('👥 Nouvelle demande d\'ami reçue:', payload);
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const newRequest = payload.new as any;
           
@@ -712,7 +661,6 @@ const Page = () => {
           table: 'friendships'
         },
         async (payload) => {
-          console.log('👥 Demande d\'ami mise à jour:', payload);
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const updated = payload.new as any;
           
@@ -744,7 +692,6 @@ const Page = () => {
           table: 'friendships'
         },
         (payload) => {
-          console.log('👥 Amitié supprimée:', payload);
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const deleted = payload.old as any;
           
@@ -1021,7 +968,6 @@ const Page = () => {
               : u
           ));
 
-          console.log('👤 Profil mis à jour en temps réel:', updatedProfile);
         }
       )
       .subscribe();
@@ -1052,17 +998,13 @@ const Page = () => {
           table: 'private_messages'
         },
         async (payload) => {
-          console.log('💬 Nouveau message privé détecté:', payload);
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const newMessage = payload.new as any;
           
           // Ignorer si ce n'est pas pour nous
           if (newMessage.receiver_id !== user.id) {
-            console.log('Message pas pour nous, ignoré');
             return;
           }
-          
-          console.log('💬 Message pour nous!');
           
           // Récupérer le profil de l'expéditeur
           const { data: senderProfile } = await supabase
@@ -1526,7 +1468,6 @@ console.log('🧊 ICE candidate ajouté');
           
           const userColor = profile?.color || '#10B981';
           const avatarUrl = profile?.avatar_url;
-          console.log('🎨 Commentaire', comment.id, 'user', comment.user_id, 'couleur:', userColor);
           
           return {
             ...comment,
@@ -1541,7 +1482,6 @@ console.log('🧊 ICE candidate ajouté');
         [messageId]: commentsWithColors
       }));
       
-      console.log('Commentaires fetched:', commentsWithColors);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Une erreur inconnue est survenue');
     } finally {
@@ -1563,8 +1503,6 @@ console.log('🧊 ICE candidate ajouté');
         const fileExt = imageFile.name.split('.').pop();
         const fileName = `${user.id}/${Date.now()}.${fileExt}`;
         
-        console.log('📤 Upload de l\'image:', fileName);
-        
         const { error: uploadError } = await supabase.storage
           .from('message-images')
           .upload(fileName, imageFile, {
@@ -1583,7 +1521,6 @@ console.log('🧊 ICE candidate ajouté');
           .getPublicUrl(fileName);
 
         imageUrl = urlData.publicUrl;
-        console.log('✅ Image uploadée:', imageUrl);
       }
 
       const response = await fetch(`${BASE_URL}/insert-message`, {
@@ -1819,15 +1756,12 @@ const updateOnlineStatus = useCallback(async () => {
   if (!user) return;
 
   const now = new Date().toISOString();
-  console.log('📝 Mise à jour last_seen:', now);
 
   try {
     await supabase
       .from('profiles')
       .update({ last_seen: now })
       .eq('id', user.id);
-
-    console.log('✅ last_seen mis à jour dans la DB');
 
     // ✅ IMPORTANT : met à jour l'utilisateur local (sinon le header ne bouge pas)
     setUser(prev => (prev ? { ...prev, last_seen: now } : prev));
@@ -1841,7 +1775,6 @@ const updateOnlineStatus = useCallback(async () => {
         event: 'user_active',
         payload: { userId: user.id, lastSeen: now }
       });
-      console.log('📣 Broadcast user_active envoyé', { userId: user.id, lastSeen: now });
     } catch (bErr) {
       console.warn('⚠️ Échec du broadcast user_active:', bErr);
     }
@@ -1862,8 +1795,6 @@ const updateOnlineStatus = useCallback(async () => {
       }
     }, 0);
 
-    console.log('✅ État local mis à jour pour user actuel');
-
     lastActivityUpdate.current = Date.now();
   } catch (err) {
     console.error('❌ Erreur mise à jour last_seen:', err);
@@ -1880,7 +1811,6 @@ const updateOnlineStatus = useCallback(async () => {
     
     // Ne mettre à jour que si le seuil configuré s'est écoulé
     if (timeSinceLastUpdate >= ONLINE_THRESHOLD_MS) {
-      console.log('🖱️ Activité détectée - Mise à jour du statut');
       updateOnlineStatus();
     }
   }, [user]);
@@ -1889,7 +1819,6 @@ const updateOnlineStatus = useCallback(async () => {
 useEffect(() => {
   if (!user?.id) return;
 
-  console.log('🟢 Arrivée sur le site - Passage en ligne');
   updateOnlineStatus();
 
   loadOnlineUsers();
@@ -2048,8 +1977,6 @@ useEffect(() => {
     try {
       setIsUpdatingColor(true);
       
-      console.log('🎨 Mise à jour de la couleur:', editingColor, 'pour user:', user.id);
-      
       // ✅ Mettre à jour la couleur dans la table profiles
       const { data: updateData, error } = await supabase
         .from('profiles')
@@ -2061,8 +1988,6 @@ useEffect(() => {
         console.error('❌ Erreur lors de la mise à jour:', error);
         throw error;
       }
-
-      console.log('✅ Résultat de la mise à jour:', updateData);
 
       // ✅ Vérifier que la mise à jour a bien été effectuée
       const { data: verifyData, error: verifyError } = await supabase
@@ -2076,13 +2001,9 @@ useEffect(() => {
         throw verifyError;
       }
 
-      console.log('🔍 Vérification - Couleur dans la BDD:', verifyData?.color);
-
       if (verifyData?.color !== editingColor) {
         throw new Error(`La couleur n'a pas été mise à jour dans la BDD. Couleur actuelle: ${verifyData?.color}`);
       }
-
-      console.log('✅ Couleur mise à jour avec succès');
 
       // ✅ Mettre à jour l'état local
       setUser(prev => prev ? { ...prev, color: editingColor } : null);
@@ -2391,8 +2312,6 @@ useEffect(() => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { userId, lastSeen } = payload as any;
       if (!userId || !lastSeen) return;
-
-      console.log('📣 Reçu broadcast user_active:', { userId, lastSeen });
 
       // Mettre à jour partout où apparaît cet utilisateur
       setFriends(prev => prev.map(f => f.id === userId ? { ...f, last_seen: lastSeen } : f));
@@ -2765,27 +2684,36 @@ useEffect(() => {
   };
 
   const ensurePeerConnection = async (callId: string, otherUserId: string) => {
-    // 1) Micro
+    console.log("🔧 Setting up WebRTC peer connection...");
+
+    // 1) Get microphone access
     if (!localStreamRef.current) {
-      localStreamRef.current = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const track = localStreamRef.current!.getAudioTracks()[0];
+      console.log("🎤 Requesting microphone access...");
+      localStreamRef.current = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        }
+      });
 
-console.log("🎤 local track:", {
-  enabled: track.enabled,
-  muted: track.muted,
-  readyState: track.readyState,
-  label: track.label,
-});
+      const audioTrack = localStreamRef.current.getAudioTracks()[0];
+      console.log("🎤 Microphone ready:", {
+        label: audioTrack.label,
+        enabled: audioTrack.enabled,
+        muted: audioTrack.muted,
+        readyState: audioTrack.readyState
+      });
 
-track.onmute = () => console.warn("🚫 local track muted (plus d'audio envoyé)");
-track.onunmute = () => console.warn("✅ local track unmuted (audio de retour)");
-track.onended = () => console.warn("🛑 local track ended");
-
-
+      // Monitor track state
+      audioTrack.onmute = () => console.log("🚫 Local track muted");
+      audioTrack.onunmute = () => console.log("✅ Local track unmuted");
+      audioTrack.onended = () => console.log("🛑 Local track ended");
     }
 
-    // 2) PC
+    // 2) Create peer connection if needed
     if (!pcRef.current) {
+      console.log("🧩 Creating RTCPeerConnection...");
       const pc = new RTCPeerConnection({
         iceServers: [
           { urls: "stun:stun.l.google.com:19302" },
@@ -2793,110 +2721,88 @@ track.onended = () => console.warn("🛑 local track ended");
           { urls: "stun:stun2.l.google.com:19302" },
           { urls: "stun:stun3.l.google.com:19302" },
           { urls: "stun:stun4.l.google.com:19302" },
-          // TURN alternatif
-          { urls: "turn:turn.bistri.com:80", username: "homeo", credential: "homeo" },
-          { urls: "turn:turn.bistri.com:443", username: "homeo", credential: "homeo" },
         ],
-        
+        iceCandidatePoolSize: 10
       });
-      // ✅ Force une négociation audio correcte
-// pc.addTransceiver("audio", { direction: "sendrecv" }); // Removed - addTrack creates transceiver automatically
 
-console.log("🧩 initial connectionState:", pc.connectionState);
-console.log("🧊 initial ICE state:", pc.iceConnectionState);
+      // Create audio transceiver
+      const audioTransceiver = pc.addTransceiver('audio', {
+        direction: 'sendrecv'
+      });
+      console.log("📡 Created audio transceiver:", audioTransceiver.direction);
 
-      // Push ICE -> DB
-      pc.onicecandidate = async (e) => {
-        if (!e.candidate || !user) return;
-        await supabase.from('webrtc_signals').insert({
-          call_id: callId,
-          sender_id: user.id,
-          receiver_id: otherUserId,
-          signal_type: 'ice_candidate',
-          signal_data: e.candidate
-        });
+      // Replace the transceiver's sender track with our microphone
+      const localAudioTrack = localStreamRef.current.getAudioTracks()[0];
+      await audioTransceiver.sender.replaceTrack(localAudioTrack);
+      console.log("🎙️ Audio track assigned to transceiver sender");
+
+      // Handle remote tracks
+      pc.ontrack = (event) => {
+        console.log("🎧 Remote track received:", event.track.kind);
+        const [remoteStream] = event.streams;
+
+        const audioElement = remoteAudioRef.current;
+        if (audioElement) {
+          audioElement.srcObject = remoteStream;
+          audioElement.volume = 1;
+          audioElement.muted = false;
+
+          // Auto-play (may be blocked by browser)
+          audioElement.play().catch(e => {
+            console.warn("🔇 Auto-play blocked:", e);
+          });
+        }
       };
 
-      // Remote track
-pc.ontrack = async (event) => {
-  const [remoteStream] = event.streams;
-  console.log("🎧 ontrack fired", remoteStream);
+      // Handle ICE candidates
+      pc.onicecandidate = async (event) => {
+        if (event.candidate && user) {
+          console.log("🧊 Sending ICE candidate");
+          await supabase.from('webrtc_signals').insert({
+            call_id: callId,
+            sender_id: user.id,
+            receiver_id: otherUserId,
+            signal_type: 'ice_candidate',
+            signal_data: event.candidate
+          });
+        }
+      };
 
-  const audio = remoteAudioRef.current;
-  if (!audio) {
-    console.warn("❌ remoteAudioRef est null");
-    return;
-  }
+      // Monitor connection state
+      pc.onconnectionstatechange = () => {
+        console.log("🧩 Connection state:", pc.connectionState);
+        if (pc.connectionState === 'connected') {
+          console.log("✅ WebRTC fully connected!");
 
-  audio.srcObject = remoteStream;
-  const rTracks = remoteStream.getAudioTracks();
-console.log("🎚️ remote audio tracks:", rTracks.map(t => ({
-  id: t.id,
-  enabled: t.enabled,
-  muted: t.muted,
-  readyState: t.readyState,
-  label: t.label
-})));
+          // Start monitoring audio stats
+          setTimeout(() => {
+            const statsInterval = setInterval(async () => {
+              if (pc.connectionState !== 'connected') {
+                clearInterval(statsInterval);
+                return;
+              }
 
-  audio.muted = false;
-  audio.volume = 1;
+              const stats = await pc.getStats();
+              for (const report of stats.values()) {
+                if (report.type === 'outbound-rtp' && report.kind === 'audio') {
+                  console.log("📊 Audio stats:", {
+                    bytesSent: report.bytesSent,
+                    packetsSent: report.packetsSent,
+                    timestamp: report.timestamp
+                  });
+                }
+              }
+            }, 2000);
+          }, 1000);
+        }
+      };
 
-  // logs utiles
-  audio.onplay = () => console.log("▶️ remote audio playing");
-  audio.onpause = () => console.log("⏸️ remote audio paused");
-  audio.onloadedmetadata = () => console.log("ℹ️ metadata loaded, readyState=", audio.readyState);
-
-  try {
-    await audio.play();
-    console.log("✅ play() ok");
-  } catch (e) {
-    console.warn("🔇 play() bloqué (autoplay?)", e);
-  }
-};
-
-
-
-      // Add local track(s) using transceiver
-      const audioTrack = localStreamRef.current.getAudioTracks()[0];
-      if (audioTrack) {
-        pc.addTransceiver(audioTrack, { direction: 'sendrecv' });
-        console.log("➕ Added audio transceiver with track:", audioTrack.label, audioTrack.enabled);
-      }
-
-      // Log transceivers after adding tracks
-      console.log("📡 Transceivers after adding tracks:", pc.getTransceivers().map(t => ({
-        mid: t.mid,
-        direction: t.direction,
-        currentDirection: t.currentDirection,
-        sender: !!t.sender.track,
-        receiver: !!t.receiver.track
-      })));
+      pc.oniceconnectionstatechange = () => {
+        console.log("🧊 ICE state:", pc.iceConnectionState);
+      };
 
       pcRef.current = pc;
-      pc.oniceconnectionstatechange = () => {
-  console.log("🧊 ICE state:", pc.iceConnectionState);
-};
-
-pc.onicegatheringstatechange = () => {
-  console.log("🧊 gathering state:", pc.iceGatheringState);
-};
-
-pc.onsignalingstatechange = () => {
-  console.log("📡 signaling state:", pc.signalingState);
-};
-
-      pc.onconnectionstatechange = () => {
-  console.log("🧩 connectionState:", pc.connectionState);
-if (pc.connectionState === "connected") {
-  console.log("✅ WebRTC réellement connecté");
-  setCallStatus("connected");
-}
-if (pc.connectionState === "failed" || pc.connectionState === "disconnected") {
-  console.warn("❌ WebRTC failed/disconnected");
-}
-
-};
-
+      console.log("✅ Peer connection setup complete");
     }
   };
 
@@ -2925,35 +2831,9 @@ if (pc.connectionState === "failed" || pc.connectionState === "disconnected") {
       await ensurePeerConnection(call.id, activeConversationUser.id);
 
       const pc = pcRef.current!;
-      pc.oniceconnectionstatechange = () => {
-  console.log("🧊 ICE state:", pc.iceConnectionState);
-};
-
-pc.onconnectionstatechange = () => {
-  console.log("🔗 PC state:", pc.connectionState);
-};
-
-pc.onicecandidateerror = (e) => {
-  console.warn("🧊 ICE candidate error:", e);
-};
-
-const offer = await pc.createOffer();
+      const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
-console.log('📤 Local description set for offer');
-
-setTimeout(() => {
-  setInterval(async () => {
-    const pc = pcRef.current;
-    if (!pc) return;
-
-    const stats = await pc.getStats();
-    for (const r of stats.values()) {
-      if (r.type === "outbound-rtp" && r.kind === "audio") {
-        console.log("📡 outbound audio:", { bytesSent: r.bytesSent, packetsSent: r.packetsSent });
-      }
-    }
-  }, 1000);
-}, 1000);
+      console.log('📤 Offer created and set as local description');
 
       await supabase.from('webrtc_signals').insert({
         call_id: call.id,
@@ -2962,6 +2842,8 @@ setTimeout(() => {
         signal_type: 'offer',
         signal_data: offer,
       });
+
+      console.log('📤 Offer sent to database');
     } catch (e) {
       console.error(e);
       toast.error("Impossible de démarrer l'appel");
