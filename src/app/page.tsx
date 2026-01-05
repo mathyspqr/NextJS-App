@@ -2838,6 +2838,8 @@ useEffect(() => {
             audioElement.oncanplaythrough = () => console.log("🎧 Audio element can play through");
 
             // Force play with error handling for mobile
+            const playPromise = audioElement.play();
+            if (playPromise !== undefined) {
               playPromise.then(() => {
                 console.log("🎧 Audio playback started successfully");
                 console.log("🎧 Audio element playing:", !audioElement.paused, "currentTime:", audioElement.currentTime);
@@ -2862,6 +2864,7 @@ useEffect(() => {
                 document.addEventListener('touchstart', resumeAudio, { once: true });
                 document.addEventListener('click', resumeAudio, { once: true });
               });
+            }
 
             console.log("🎧 Remote audio connected to audio element");
           } else {
