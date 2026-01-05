@@ -176,7 +176,7 @@ const Page = () => {
   const [activeCall, setActiveCall] = useState<VoiceCall | null>(null);
   const [callStatus, setCallStatus] = useState<'idle' | 'calling' | 'ringing' | 'connecting' | 'connected'>('idle');
   const [isMuted, setIsMuted] = useState(false);
-  const [microphoneActive, setMicrophoneActive] = useState(false);
+  const [audioNeedsInteraction, setAudioNeedsInteraction] = useState(false);
 
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const pendingIceRef = useRef<RTCIceCandidateInit[]>([]);
@@ -2698,6 +2698,8 @@ useEffect(() => {
 
     pendingIceRef.current = [];
     setIsMuted(false);
+    setMicrophoneActive(false);
+    setAudioNeedsInteraction(false);
   };
 
   const ensurePeerConnection = async (callId: string, otherUserId: string) => {
@@ -2706,14 +2708,24 @@ useEffect(() => {
     // 1) Get microphone access if not already done
     if (!localStreamRef.current) {
       console.log("🎤 Requesting microphone access...");
+      
+      // Detect if we're on mobile
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      console.log("📱 Device type:", isMobile ? "Mobile" : "Desktop");
+      
       try {
         localStreamRef.current = await navigator.mediaDevices.getUserMedia({
           audio: {
             echoCancellation: true,
             noiseSuppression: true,
             autoGainControl: true,
-            sampleRate: 44100,
-            channelCount: 1
+            sampleRate: isMobile ? 16000 : 44100, // Lower sample rate for mobile
+            channelCount: 1,
+            // Additional constraints for mobile
+            ...(isMobile && {
+              latency: 0.01,
+              volume: 1.0
+            })
           }
         });
         console.log("🎤 Microphone access granted");
@@ -2820,14 +2832,35 @@ useEffect(() => {
             audioElement.onpause = () => console.log("🎧 Audio element paused");
             audioElement.onended = () => console.log("🎧 Audio element ended");
             audioElement.onerror = (e) => console.error("🎧 Audio element error:", e);
+            audioElement.onwaiting = () => console.log("🎧 Audio element waiting for data");
+            audioElement.oncanplay = () => console.log("🎧 Audio element can play");
+            audioElement.oncanplaythrough = () => console.log("🎧 Audio element can play through");
 
-            // Force play
-            audioElement.play().then(() => {
-              console.log("🎧 Audio playback started successfully");
-              console.log("🎧 Audio element playing:", !audioElement.paused, "currentTime:", audioElement.currentTime);
-            }).catch(e => {
-              console.warn("🔇 Auto-play blocked:", e);
-            });
+            // Force play with error handling for mobile
+              playPromise.then(() => {
+                console.log("🎧 Audio playback started successfully");
+                console.log("🎧 Audio element playing:", !audioElement.paused, "currentTime:", audioElement.currentTime);
+                setAudioNeedsInteraction(false);
+              }).catch(e => {
+                console.warn("🔇 Auto-play blocked (likely mobile):", e);
+                console.log("🔇 Attempting to play on user interaction...");
+                setAudioNeedsInteraction(true);
+                
+                // On mobile, we might need user interaction to start audio
+                const resumeAudio = () => {
+                  audioElement.play().then(() => {
+                    console.log("🎧 Audio resumed after user interaction");
+                    setAudioNeedsInteraction(false);
+                  }).catch(e2 => {
+                    console.error("❌ Still can't play audio:", e2);
+                  });
+                  document.removeEventListener('touchstart', resumeAudio);
+                  document.removeEventListener('click', resumeAudio);
+                };
+                
+                document.addEventListener('touchstart', resumeAudio, { once: true });
+                document.addEventListener('click', resumeAudio, { once: true });
+              });
 
             console.log("🎧 Remote audio connected to audio element");
           } else {
@@ -3821,8 +3854,30 @@ console.log('📤 Local description set for answer in accept');
       {callStatus === 'ringing' && 'Ça sonne…'}
       {callStatus === 'connecting' && 'Connexion en cours…'}
       {callStatus === 'connected' && 'En appel'}
+      {audioNeedsInteraction && (
+        <div className="mt-1 text-xs text-orange-600 font-medium">
+          🔊 Touchez l'écran pour activer l'audio
+        </div>
+      )}
     </div>
     <div className="flex items-center gap-2">
+      {audioNeedsInteraction && (
+        <button
+          onClick={() => {
+            if (remoteAudioRef.current) {
+              remoteAudioRef.current.play().then(() => {
+                console.log("🎧 Manual audio play successful");
+                setAudioNeedsInteraction(false);
+              }).catch(e => {
+                console.error("❌ Manual audio play failed:", e);
+              });
+            }
+          }}
+          className="px-3 py-1 rounded-lg bg-orange-500 text-white text-sm hover:bg-orange-600"
+        >
+          🔊 Activer audio
+        </button>
+      )}
       <button
         onClick={toggleMute}
         className={`px-3 py-1 rounded-lg border text-sm flex items-center space-x-2 ${
