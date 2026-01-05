@@ -2766,7 +2766,7 @@ useEffect(() => {
         localAudioTrack.onunmute = () => console.log("🎙️ Local audio track unmuted");
         localAudioTrack.onended = () => console.log("🎙️ Local audio track ended");
 
-        pc.addTransceiver(localAudioTrack, { direction: 'sendonly' });
+        pc.addTransceiver(localAudioTrack, { direction: 'sendrecv' });
         console.log("🎙️ Transceiver added successfully");
         
         // Vérifier les transceivers après ajout
