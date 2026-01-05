@@ -1219,6 +1219,7 @@ const Page = () => {
           // ignorer si ce signal n'est pas pour moi ou pas sur cet appel
           if (sig.call_id !== currentCall.id) return;
           if (sig.receiver_id !== user.id) return;
+          if (sig.sender_id === user.id) return; // ignorer ses propres signaux
 
           const otherUserId = sig.sender_id;
 
