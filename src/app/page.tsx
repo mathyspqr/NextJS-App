@@ -2859,7 +2859,7 @@ console.log("🎚️ remote audio tracks:", rTracks.map(t => ({
       // Add local track(s) using transceiver
       const audioTrack = localStreamRef.current.getAudioTracks()[0];
       if (audioTrack) {
-        const transceiver = pc.addTransceiver(audioTrack, { direction: 'sendrecv' });
+        pc.addTransceiver(audioTrack, { direction: 'sendrecv' });
         console.log("➕ Added audio transceiver with track:", audioTrack.label, audioTrack.enabled);
       }
 
