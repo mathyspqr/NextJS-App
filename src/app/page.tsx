@@ -1224,9 +1224,12 @@ const Page = () => {
 
           try {
             console.log('📥 Signal reçu:', sig.signal_type, 'de', sig.sender_id);
-            // Assure pc + micro
-            await ensurePeerConnection(currentCall.id, otherUserId);
-            const pc = pcRef.current!;
+            
+            const pc = pcRef.current;
+            if (!pc) {
+              console.warn('⚠️ Peer connection not found, ignoring signal');
+              return;
+            }
 
             if (sig.signal_type === 'offer') {
               console.log('📥 Remote description set from offer');
@@ -2745,15 +2748,21 @@ useEffect(() => {
       // 4) Handle remote tracks
       pc.ontrack = (event) => {
         console.log("🎧 Remote track received:", event.track.kind, "from", event.streams.length, "streams");
+        console.log("🎧 Track enabled:", event.track.enabled, "readyState:", event.track.readyState);
 
         if (event.track.kind === 'audio') {
-          // Create or update remote stream
-          if (!remoteStreamRef.current) {
-            remoteStreamRef.current = new MediaStream();
+          // Use the stream from the event if available, otherwise create one
+          if (event.streams && event.streams.length > 0) {
+            remoteStreamRef.current = event.streams[0];
+            console.log("🎧 Using stream from event, tracks:", event.streams[0].getTracks().length);
+          } else {
+            // Fallback: create new stream and add track
+            if (!remoteStreamRef.current) {
+              remoteStreamRef.current = new MediaStream();
+            }
+            remoteStreamRef.current.addTrack(event.track);
+            console.log("🎧 Created/fallback stream, total tracks:", remoteStreamRef.current.getTracks().length);
           }
-
-          // Add the remote audio track to our remote stream
-          remoteStreamRef.current.addTrack(event.track);
 
           // Connect to audio element
           const audioElement = remoteAudioRef.current;
@@ -2761,9 +2770,12 @@ useEffect(() => {
             audioElement.srcObject = remoteStreamRef.current;
             audioElement.volume = 1.0;
             audioElement.muted = false;
+            console.log("🎧 Audio element configured - volume:", audioElement.volume, "muted:", audioElement.muted);
 
             // Try to play (may be blocked by browser policy)
-            audioElement.play().catch(e => {
+            audioElement.play().then(() => {
+              console.log("🎧 Audio playback started successfully");
+            }).catch(e => {
               console.warn("🔇 Auto-play blocked, user interaction required:", e);
               // Note: In production, you might want to show a play button
             });
