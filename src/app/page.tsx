@@ -2800,7 +2800,7 @@ track.onended = () => console.warn("🛑 local track ended");
         
       });
       // ✅ Force une négociation audio correcte
-pc.addTransceiver("audio", { direction: "sendrecv" });
+// pc.addTransceiver("audio", { direction: "sendrecv" }); // Removed - addTrack creates transceiver automatically
 
 console.log("🧩 initial connectionState:", pc.connectionState);
 console.log("🧊 initial ICE state:", pc.iceConnectionState);
@@ -2859,7 +2859,17 @@ console.log("🎚️ remote audio tracks:", rTracks.map(t => ({
       // Add local track(s)
       localStreamRef.current.getTracks().forEach(track => {
         pc.addTrack(track, localStreamRef.current!);
+        console.log("➕ Added local track to PC:", track.kind, track.label, track.enabled);
       });
+
+      // Log transceivers after adding tracks
+      console.log("📡 Transceivers after adding tracks:", pc.getTransceivers().map(t => ({
+        mid: t.mid,
+        direction: t.direction,
+        currentDirection: t.currentDirection,
+        sender: !!t.sender.track,
+        receiver: !!t.receiver.track
+      })));
 
       pcRef.current = pc;
       pc.oniceconnectionstatechange = () => {
