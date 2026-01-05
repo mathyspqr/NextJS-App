@@ -2742,8 +2742,8 @@ useEffect(() => {
       // 3) Add local audio track to peer connection
       const localAudioTrack = localStreamRef.current.getAudioTracks()[0];
       if (localAudioTrack) {
-        console.log("🎙️ Adding local audio track to peer connection");
-        pc.addTrack(localAudioTrack, localStreamRef.current);
+        console.log("🎙️ Adding local audio transceiver to peer connection");
+        pc.addTransceiver(localAudioTrack, { direction: 'sendonly' });
       }
 
       // 4) Handle remote tracks
@@ -2772,10 +2772,18 @@ useEffect(() => {
             audioElement.volume = 1.0;
             audioElement.muted = false;
             console.log("🎧 Audio element configured - volume:", audioElement.volume, "muted:", audioElement.muted);
+            console.log("🎧 Remote stream tracks:", remoteStreamRef.current.getTracks().length);
+
+            // Add event listeners for debugging
+            audioElement.onplaying = () => console.log("🎧 Audio element started playing");
+            audioElement.onpause = () => console.log("🎧 Audio element paused");
+            audioElement.onended = () => console.log("🎧 Audio element ended");
+            audioElement.onerror = (e) => console.error("🎧 Audio element error:", e);
 
             // Try to play (may be blocked by browser policy)
             audioElement.play().then(() => {
               console.log("🎧 Audio playback started successfully");
+              console.log("🎧 Audio element playing:", !audioElement.paused, "currentTime:", audioElement.currentTime);
             }).catch(e => {
               console.warn("🔇 Auto-play blocked, user interaction required:", e);
               // Note: In production, you might want to show a play button
