@@ -176,6 +176,7 @@ const Page = () => {
   const [activeCall, setActiveCall] = useState<VoiceCall | null>(null);
   const [callStatus, setCallStatus] = useState<'idle' | 'calling' | 'ringing' | 'connecting' | 'connected'>('idle');
   const [isMuted, setIsMuted] = useState(false);
+  const [microphoneActive, setMicrophoneActive] = useState(false);
   const [audioNeedsInteraction, setAudioNeedsInteraction] = useState(false);
 
   const pcRef = useRef<RTCPeerConnection | null>(null);
