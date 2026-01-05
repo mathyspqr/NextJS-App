@@ -2920,6 +2920,9 @@ console.log('📤 Local description set for answer in accept');
     signal_type: 'answer',
     signal_data: answer,
   });
+
+  // ✅ Marquer l'appel comme connecté côté UI
+  setCallStatus('connected');
 }
 
 
