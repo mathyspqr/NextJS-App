@@ -176,6 +176,7 @@ const Page = () => {
   const [activeCall, setActiveCall] = useState<VoiceCall | null>(null);
   const [callStatus, setCallStatus] = useState<'idle' | 'calling' | 'ringing' | 'connecting' | 'connected'>('idle');
   const [isMuted, setIsMuted] = useState(false);
+  const [microphoneActive, setMicrophoneActive] = useState(false);
 
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const pendingIceRef = useRef<RTCIceCandidateInit[]>([]);
@@ -2743,8 +2744,27 @@ useEffect(() => {
       const localAudioTrack = localStreamRef.current.getAudioTracks()[0];
       if (localAudioTrack) {
         console.log("🎙️ Adding local audio transceiver to peer connection");
-        console.log("🎙️ Local track enabled:", localAudioTrack.enabled, "readyState:", localAudioTrack.readyState);
+        console.log("🎙️ Local track enabled:", localAudioTrack.enabled, "readyState:", localAudioTrack.readyState, "muted:", localAudioTrack.muted);
+        console.log("🎙️ Local track settings:", localAudioTrack.getSettings());
+        console.log("🎙️ Local track constraints:", localAudioTrack.getConstraints());
+
+        // Add event listeners to local track
+        localAudioTrack.onmute = () => console.log("🎙️ Local audio track muted");
+        localAudioTrack.onunmute = () => console.log("🎙️ Local audio track unmuted");
+        localAudioTrack.onended = () => console.log("🎙️ Local audio track ended");
+
         pc.addTransceiver(localAudioTrack, { direction: 'sendonly' });
+        console.log("🎙️ Transceiver added successfully");
+        
+        // Vérifier les transceivers après ajout
+        const transceivers = pc.getTransceivers();
+        console.log("🎙️ Total transceivers:", transceivers.length);
+        transceivers.forEach((t, i) => {
+          console.log(`🎙️ Transceiver ${i}: direction=${t.direction}, mid=${t.mid}`);
+          if (t.sender && t.sender.track) {
+            console.log(`🎙️ Transceiver ${i} sender track: ${t.sender.track.kind}, enabled=${t.sender.track.enabled}`);
+          }
+        });
       } else {
         console.warn("⚠️ No local audio track found");
       }
@@ -2752,7 +2772,16 @@ useEffect(() => {
       // 4) Handle remote tracks
       pc.ontrack = (event) => {
         console.log("🎧 Remote track received:", event.track.kind, "from", event.streams.length, "streams");
-        console.log("🎧 Track enabled:", event.track.enabled, "readyState:", event.track.readyState);
+        console.log("🎧 Remote track enabled:", event.track.enabled, "readyState:", event.track.readyState, "muted:", event.track.muted);
+        console.log("🎧 Remote track settings:", event.track.getSettings());
+        
+        // Vérifier les transceivers pour les tracks distants
+        const transceivers = pc.getTransceivers();
+        transceivers.forEach((t, i) => {
+          if (t.receiver && t.receiver.track) {
+            console.log(`🎧 Transceiver ${i} receiver track: ${t.receiver.track.kind}, enabled=${t.receiver.track.enabled}, readyState=${t.receiver.track.readyState}`);
+          }
+        });
 
         if (event.track.kind === 'audio') {
           console.log("🎧 Remote track received - creating dedicated audio stream");
@@ -2830,6 +2859,43 @@ useEffect(() => {
         console.log("🧩 Connection state:", pc.connectionState);
         if (pc.connectionState === 'connected') {
           console.log("✅ WebRTC fully connected!");
+          
+          // Vérifier l'état de tous les transceivers une fois connecté
+          const transceivers = pc.getTransceivers();
+          console.log("✅ Connected - Transceivers status:");
+          transceivers.forEach((t, i) => {
+            console.log(`✅ Transceiver ${i}: direction=${t.direction}, currentDirection=${t.currentDirection}`);
+            if (t.sender && t.sender.track) {
+              console.log(`✅ Sender track ${i}: ${t.sender.track.kind}, enabled=${t.sender.track.enabled}, readyState=${t.sender.track.readyState}`);
+            }
+            if (t.receiver && t.receiver.track) {
+              console.log(`✅ Receiver track ${i}: ${t.receiver.track.kind}, enabled=${t.receiver.track.enabled}, readyState=${t.receiver.track.readyState}`);
+            }
+          });
+          
+          // Vérifier les statistiques de la connexion
+          setTimeout(async () => {
+            try {
+              const stats = await pc.getStats();
+              stats.forEach(report => {
+                if (report.type === 'inbound-rtp' && report.kind === 'audio') {
+                  console.log("📊 Inbound audio stats:", {
+                    bytesReceived: report.bytesReceived,
+                    packetsReceived: report.packetsReceived,
+                    packetsLost: report.packetsLost
+                  });
+                }
+                if (report.type === 'outbound-rtp' && report.kind === 'audio') {
+                  console.log("📊 Outbound audio stats:", {
+                    bytesSent: report.bytesSent,
+                    packetsSent: report.packetsSent
+                  });
+                }
+              });
+            } catch (e) {
+              console.warn("⚠️ Could not get stats:", e);
+            }
+          }, 2000);
         } else if (pc.connectionState === 'failed') {
           console.error("❌ WebRTC connection failed");
           cleanupWebRTC();
@@ -2867,6 +2933,15 @@ useEffect(() => {
 
       // 2) setup WebRTC and send offer
       await ensurePeerConnection(call.id, activeConversationUser.id);
+
+      // Vérifier l'état des tracks locaux avant de créer l'offre
+      if (localStreamRef.current) {
+        const audioTracks = localStreamRef.current.getAudioTracks();
+        console.log("📤 Before creating offer - Local audio tracks:");
+        audioTracks.forEach((track, i) => {
+          console.log(`📤 Track ${i}: enabled=${track.enabled}, readyState=${track.readyState}, muted=${track.muted}`);
+        });
+      }
 
       const pc = pcRef.current!;
       const offer = await pc.createOffer();
@@ -2932,6 +3007,15 @@ if (existingOffer?.signal_data) {
   await pc.setLocalDescription(answer);
 console.log('📤 Local description set for answer in accept');
 
+  // Vérifier l'état des tracks locaux avant d'envoyer l'answer
+  if (localStreamRef.current) {
+    const audioTracks = localStreamRef.current.getAudioTracks();
+    console.log("📤 Before sending answer - Local audio tracks:");
+    audioTracks.forEach((track, i) => {
+      console.log(`📤 Track ${i}: enabled=${track.enabled}, readyState=${track.readyState}, muted=${track.muted}`);
+    });
+  }
+
   console.log('📤 Envoi answer depuis accept');
   await supabase.from('webrtc_signals').insert({
     call_id: call.id,
@@ -2986,6 +3070,7 @@ console.log('📤 Local description set for answer in accept');
     const enabled = isMuted; // si muted=true -> on veut réactiver
     s.getAudioTracks().forEach(t => (t.enabled = enabled));
     setIsMuted(!isMuted);
+    setMicrophoneActive(enabled);
   };
 
 
@@ -3740,9 +3825,15 @@ console.log('📤 Local description set for answer in accept');
     <div className="flex items-center gap-2">
       <button
         onClick={toggleMute}
-        className="px-3 py-1 rounded-lg bg-white border text-sm"
+        className={`px-3 py-1 rounded-lg border text-sm flex items-center space-x-2 ${
+          isMuted ? 'bg-red-100 text-red-700 border-red-300' : 'bg-white text-gray-700 border-gray-300'
+        }`}
       >
-        {isMuted ? 'Unmute' : 'Mute'}
+        <span>{isMuted ? '🔇' : '🎤'}</span>
+        <span>{isMuted ? 'Unmute' : 'Mute'}</span>
+        {microphoneActive && !isMuted && (
+          <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+        )}
       </button>
       <button
         onClick={hangupVoiceCall}
