@@ -174,7 +174,7 @@ const Page = () => {
     // 🎙️ Voice calls (1v1)
   const [incomingCall, setIncomingCall] = useState<VoiceCall | null>(null);
   const [activeCall, setActiveCall] = useState<VoiceCall | null>(null);
-  const [callStatus, setCallStatus] = useState<'idle' | 'calling' | 'ringing' | 'connected'>('idle');
+  const [callStatus, setCallStatus] = useState<'idle' | 'calling' | 'ringing' | 'connecting' | 'connected'>('idle');
   const [isMuted, setIsMuted] = useState(false);
 
   const pcRef = useRef<RTCPeerConnection | null>(null);
@@ -182,6 +182,7 @@ const Page = () => {
 
   const localStreamRef = useRef<MediaStream | null>(null);
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
+  const remoteStreamRef = useRef<MediaStream | null>(null);
 
   const [isUpdatingColor, setIsUpdatingColor] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
@@ -2680,35 +2681,41 @@ useEffect(() => {
     }
     localStreamRef.current = null;
 
+    if (remoteStreamRef.current) {
+      remoteStreamRef.current.getTracks().forEach(t => t.stop());
+    }
+    remoteStreamRef.current = null;
+
+    // Clear audio element
+    if (remoteAudioRef.current) {
+      remoteAudioRef.current.srcObject = null;
+    }
+
+    pendingIceRef.current = [];
     setIsMuted(false);
   };
 
   const ensurePeerConnection = async (callId: string, otherUserId: string) => {
     console.log("🔧 Setting up WebRTC peer connection...");
 
-    // 1) Get microphone access
+    // 1) Get microphone access if not already done
     if (!localStreamRef.current) {
       console.log("🎤 Requesting microphone access...");
-      localStreamRef.current = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true
-        }
-      });
-
-      const audioTrack = localStreamRef.current.getAudioTracks()[0];
-      console.log("🎤 Microphone ready:", {
-        label: audioTrack.label,
-        enabled: audioTrack.enabled,
-        muted: audioTrack.muted,
-        readyState: audioTrack.readyState
-      });
-
-      // Monitor track state
-      audioTrack.onmute = () => console.log("🚫 Local track muted");
-      audioTrack.onunmute = () => console.log("✅ Local track unmuted");
-      audioTrack.onended = () => console.log("🛑 Local track ended");
+      try {
+        localStreamRef.current = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+            sampleRate: 44100,
+            channelCount: 1
+          }
+        });
+        console.log("🎤 Microphone access granted");
+      } catch (error) {
+        console.error("❌ Microphone access denied:", error);
+        throw new Error("Microphone access required for voice calls");
+      }
     }
 
     // 2) Create peer connection if needed
@@ -2725,85 +2732,84 @@ useEffect(() => {
         iceCandidatePoolSize: 10
       });
 
-      // Create audio transceiver
-      const audioTransceiver = pc.addTransceiver('audio', {
-        direction: 'sendrecv'
-      });
-      console.log("📡 Created audio transceiver:", audioTransceiver.direction);
+      // Store reference
+      pcRef.current = pc;
 
-      // Replace the transceiver's sender track with our microphone
+      // 3) Add local audio track to peer connection
       const localAudioTrack = localStreamRef.current.getAudioTracks()[0];
-      await audioTransceiver.sender.replaceTrack(localAudioTrack);
-      console.log("🎙️ Audio track assigned to transceiver sender");
+      if (localAudioTrack) {
+        console.log("🎙️ Adding local audio track to peer connection");
+        pc.addTrack(localAudioTrack, localStreamRef.current);
+      }
 
-      // Handle remote tracks
+      // 4) Handle remote tracks
       pc.ontrack = (event) => {
-        console.log("🎧 Remote track received:", event.track.kind);
-        const [remoteStream] = event.streams;
+        console.log("🎧 Remote track received:", event.track.kind, "from", event.streams.length, "streams");
 
-        const audioElement = remoteAudioRef.current;
-        if (audioElement) {
-          audioElement.srcObject = remoteStream;
-          audioElement.volume = 1;
-          audioElement.muted = false;
+        if (event.track.kind === 'audio') {
+          // Create or update remote stream
+          if (!remoteStreamRef.current) {
+            remoteStreamRef.current = new MediaStream();
+          }
 
-          // Auto-play (may be blocked by browser)
-          audioElement.play().catch(e => {
-            console.warn("🔇 Auto-play blocked:", e);
-          });
+          // Add the remote audio track to our remote stream
+          remoteStreamRef.current.addTrack(event.track);
+
+          // Connect to audio element
+          const audioElement = remoteAudioRef.current;
+          if (audioElement) {
+            audioElement.srcObject = remoteStreamRef.current;
+            audioElement.volume = 1.0;
+            audioElement.muted = false;
+
+            // Try to play (may be blocked by browser policy)
+            audioElement.play().catch(e => {
+              console.warn("🔇 Auto-play blocked, user interaction required:", e);
+              // Note: In production, you might want to show a play button
+            });
+
+            console.log("🎧 Remote audio connected to audio element");
+          } else {
+            console.warn("⚠️ Remote audio element not found");
+          }
         }
       };
 
-      // Handle ICE candidates
+      // 5) Handle ICE candidates
       pc.onicecandidate = async (event) => {
         if (event.candidate && user) {
           console.log("🧊 Sending ICE candidate");
-          await supabase.from('webrtc_signals').insert({
-            call_id: callId,
-            sender_id: user.id,
-            receiver_id: otherUserId,
-            signal_type: 'ice_candidate',
-            signal_data: event.candidate
-          });
+          try {
+            await supabase.from('webrtc_signals').insert({
+              call_id: callId,
+              sender_id: user.id,
+              receiver_id: otherUserId,
+              signal_type: 'ice_candidate',
+              signal_data: event.candidate
+            });
+          } catch (error) {
+            console.error("❌ Failed to send ICE candidate:", error);
+          }
         }
       };
 
-      // Monitor connection state
+      // 6) Monitor connection state
       pc.onconnectionstatechange = () => {
         console.log("🧩 Connection state:", pc.connectionState);
         if (pc.connectionState === 'connected') {
           console.log("✅ WebRTC fully connected!");
-
-          // Start monitoring audio stats
-          setTimeout(() => {
-            const statsInterval = setInterval(async () => {
-              if (pc.connectionState !== 'connected') {
-                clearInterval(statsInterval);
-                return;
-              }
-
-              const stats = await pc.getStats();
-              for (const report of stats.values()) {
-                if (report.type === 'outbound-rtp' && report.kind === 'audio') {
-                  console.log("📊 Audio stats:", {
-                    bytesSent: report.bytesSent,
-                    packetsSent: report.packetsSent,
-                    timestamp: report.timestamp
-                  });
-                }
-              }
-            }, 2000);
-          }, 1000);
+        } else if (pc.connectionState === 'failed') {
+          console.error("❌ WebRTC connection failed");
+          cleanupWebRTC();
         }
       };
 
       pc.oniceconnectionstatechange = () => {
-        console.log("🧊 ICE state:", pc.iceConnectionState);
+        console.log("🧊 ICE connection state:", pc.iceConnectionState);
       };
 
-      pcRef.current = pc;
-      console.log("✅ Peer connection setup complete");
-    }
+      console.log("🧩 Peer connection setup complete");
+    };
   };
 
   const startVoiceCall = async () => {
@@ -2857,7 +2863,7 @@ useEffect(() => {
     if (!user) return;
 
     try {
-setCallStatus('ringing'); // ou "connecting"
+      setCallStatus('connecting');
       setActiveCall(call);
       setIncomingCall(null);
 
@@ -3693,6 +3699,7 @@ console.log('📤 Local description set for answer in accept');
     <div className="text-sm text-purple-800">
       {callStatus === 'calling' && 'Appel en cours…'}
       {callStatus === 'ringing' && 'Ça sonne…'}
+      {callStatus === 'connecting' && 'Connexion en cours…'}
       {callStatus === 'connected' && 'En appel'}
     </div>
     <div className="flex items-center gap-2">
