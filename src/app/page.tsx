@@ -122,6 +122,29 @@ interface Conversation {
   unreadCount: number;
 }
 
+interface VoiceCall {
+  id: string;
+  caller_id: string;
+  receiver_id: string;
+  status: 'calling' | 'ringing' | 'connected' | 'ended' | 'missed';
+  started_at: string | null;
+  ended_at: string | null;
+  duration_seconds: number | null;
+  created_at: string;
+}
+
+interface WebRTCSignal {
+  id: string;
+  call_id: string;
+  sender_id: string;
+  receiver_id: string;
+  signal_type: 'offer' | 'answer' | 'ice_candidate';
+  signal_data: any; // SDP / ICE candidate
+  created_at: string;
+}
+
+
+
 async function getAuthHeader(): Promise<{ Authorization?: string }> {
   const { data } = await supabase.auth.getSession();
   const token = data.session?.access_token;
@@ -148,6 +171,18 @@ const Page = () => {
   const [isUpdatingUsername, setIsUpdatingUsername] = useState(false);
   const [isEditingColor, setIsEditingColor] = useState(false);
   const [editingColor, setEditingColor] = useState('#3B82F6');
+    // 🎙️ Voice calls (1v1)
+  const [incomingCall, setIncomingCall] = useState<VoiceCall | null>(null);
+  const [activeCall, setActiveCall] = useState<VoiceCall | null>(null);
+  const [callStatus, setCallStatus] = useState<'idle' | 'calling' | 'ringing' | 'connected'>('idle');
+  const [isMuted, setIsMuted] = useState(false);
+
+  const pcRef = useRef<RTCPeerConnection | null>(null);
+  const pendingIceRef = useRef<RTCIceCandidateInit[]>([]);
+
+  const localStreamRef = useRef<MediaStream | null>(null);
+  const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
+
   const [isUpdatingColor, setIsUpdatingColor] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -201,12 +236,9 @@ const Page = () => {
   const profileModalRef = useRef<HTMLDivElement>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
   const [usersTyping, setUsersTyping] = useState<Record<string, string>>({});
-  const [lastMessageCount, setLastMessageCount] = useState(0);
   const [lastCommentCount, setLastCommentCount] = useState(0);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const commentsEndRef = useRef<HTMLDivElement>(null);
   const typingBroadcastInterval = useRef<NodeJS.Timeout | null>(null);
   const typingRemovalTimeouts = useRef<Record<string, NodeJS.Timeout>>({});
   const lastActivityUpdate = useRef<number>(0);
@@ -1139,6 +1171,133 @@ const Page = () => {
       supabase.removeChannel(privateTypingChannel);
     };
   }, [isAuthenticated, user]);
+
+  // ✅ Realtime - appels vocaux entrants (voice_calls)
+  useEffect(() => {
+    if (!isAuthenticated || !user) return;
+
+    const ch = supabase
+      .channel(`voice-calls-${user.id}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'voice_calls' },
+        (payload) => {
+          const call = payload.new as any as VoiceCall;
+
+          // Si c'est un appel entrant pour moi
+          if (call.receiver_id === user.id && call.status === 'calling') {
+            setIncomingCall(call);
+            setCallStatus('ringing');
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'voice_calls' },
+        (payload) => {
+          const call = payload.new as any as VoiceCall;
+
+          // si l'appel actif est terminé
+          if (activeCall?.id === call.id && (call.status === 'ended' || call.status === 'missed')) {
+            setActiveCall(null);
+            setIncomingCall(null);
+            setCallStatus('idle');
+            cleanupWebRTC();
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(ch);
+    };
+  }, [isAuthenticated, user, activeCall]);
+
+  
+    // ✅ Realtime - signaux WebRTC (offer/answer/ice)
+  useEffect(() => {
+    if (!isAuthenticated || !user) return;
+    const currentCall = activeCall || incomingCall;
+    if (!currentCall) return;
+
+    const ch = supabase
+      .channel(`webrtc-signals-${currentCall.id}-${user.id}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'webrtc_signals' },
+        async (payload) => {
+          const sig = payload.new as any as WebRTCSignal;
+
+          // ignorer si ce signal n'est pas pour moi ou pas sur cet appel
+          if (sig.call_id !== currentCall.id) return;
+          if (sig.receiver_id !== user.id) return;
+
+          const otherUserId = sig.sender_id;
+
+          try {
+            console.log('📥 Signal reçu:', sig.signal_type, 'de', sig.sender_id);
+            // Assure pc + micro
+            await ensurePeerConnection(currentCall.id, otherUserId);
+            const pc = pcRef.current!;
+
+            if (sig.signal_type === 'offer') {
+              console.log('📥 Remote description set from offer');
+              await pc.setRemoteDescription(sig.signal_data);
+              // Appliquer ICE bufferisés maintenant que remoteDescription existe
+for (const c of pendingIceRef.current) {
+  try { await pc.addIceCandidate(c); console.log('🧊 ICE buffered ajouté'); } catch (e) { console.warn("ICE buffered failed", e); }
+}
+pendingIceRef.current = [];
+
+              const answer = await pc.createAnswer();
+              await pc.setLocalDescription(answer);
+console.log('📤 Local description set for answer');
+
+              console.log('📤 Envoi answer');
+              await supabase.from('webrtc_signals').insert({
+                call_id: activeCall?.id,
+                sender_id: user.id,
+                receiver_id: otherUserId,
+                signal_type: 'answer',
+                signal_data: answer,
+              });
+            }
+
+            if (sig.signal_type === 'answer') {
+              console.log('📥 Remote description set from answer');
+              await pc.setRemoteDescription(sig.signal_data);
+              // Appliquer ICE bufferisés maintenant que remoteDescription existe
+for (const c of pendingIceRef.current) {
+  try { await pc.addIceCandidate(c); console.log('🧊 ICE buffered ajouté'); } catch (e) { console.warn("ICE buffered failed", e); }
+}
+pendingIceRef.current = [];
+
+            }
+
+            if (sig.signal_type === 'ice_candidate') {
+console.log('🧊 ICE reçu de', sig.sender_id);
+if (!pc.remoteDescription) {
+  // Pas encore de remoteDescription -> on bufferise
+  pendingIceRef.current.push(sig.signal_data);
+  return;
+}
+
+await pc.addIceCandidate(sig.signal_data);
+console.log('🧊 ICE candidate ajouté');
+            }
+          } catch (e) {
+            console.error(e);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(ch);
+    };
+  }, [isAuthenticated, user, activeCall]);
+
+
   // ✅ Fonction pour broadcaster le typing privé
   const handlePrivateTyping = useCallback(() => {
     if (!user || !activeConversation || !activeConversationUser) return;
@@ -1189,15 +1348,7 @@ const Page = () => {
     });
   }, [user, activeConversation]);
 
-  // ✅ Fonction pour scroller en bas des commentaires
-  const scrollToBottomComments = useCallback((smooth = true) => {
-    if (commentsEndRef.current) {
-      commentsEndRef.current.scrollIntoView({
-        behavior: smooth ? 'smooth' : 'auto',
-        block: 'end'
-      });
-    }
-  }, []);
+  // Auto-scroll des commentaires désactivé (conserver uniquement le scroll privé)
 
   // ✅ Fonction pour scroller en bas des messages privés
   const scrollToBottomPrivate = useCallback((smooth = true) => {
@@ -1297,25 +1448,9 @@ const Page = () => {
     };
   }, []);
 
-  // ✅ Scroll automatique vers le bas quand un nouveau message arrive
-  useEffect(() => {
-    if (messages.length > lastMessageCount) {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-      setLastMessageCount(messages.length);
-    }
-  }, [messages.length, lastMessageCount]);
+  // Auto-scroll des messages publics désactivé (conserver uniquement le scroll privé)
 
-  // ✅ Scroll automatique vers le bas quand un nouveau commentaire arrive
-  useEffect(() => {
-    if (commentingMessageId) {
-      const currentComments = commentairesByMessage[commentingMessageId] || [];
-      if (currentComments.length > lastCommentCount) {
-        // Délai pour laisser l'animation du nouveau commentaire se terminer
-        setTimeout(() => scrollToBottomComments(true), 150);
-        setLastCommentCount(currentComments.length);
-      }
-    }
-  }, [commentairesByMessage, commentingMessageId, lastCommentCount, scrollToBottomComments]);
+  // Auto-scroll des commentaires désactivé
 
   const fetchCommentaires = useCallback(async (messageId: number, forceReload = false) => {
     // ✅ Ne charger que si pas déjà en cache ou si rechargement forcé
@@ -1584,8 +1719,7 @@ const Page = () => {
       
       // ✅ Charger les commentaires en arrière-plan
       await fetchCommentaires(id);
-      // ✅ Scroller vers le bas après le chargement avec délai pour laisser les animations se terminer
-      setTimeout(() => scrollToBottomComments(true), 300);
+      // Auto-scroll des commentaires désactivé (aucune action de scroll)
     } else {
       // ✅ Fermer avec animation
       setClosingMessageId(id);
@@ -1594,7 +1728,7 @@ const Page = () => {
         setClosingMessageId(null);
       }, 200); // durée de fadeOut
     }
-  }, [commentingMessageId, fetchCommentaires, scrollToBottomComments]);
+  }, [commentingMessageId, fetchCommentaires]);
 
   const handleCommentSubmit = async (e: React.FormEvent, id: number) => {
     e.preventDefault();
@@ -2620,6 +2754,311 @@ useEffect(() => {
     }
   };
 
+    const cleanupWebRTC = () => {
+    try {
+      pcRef.current?.close();
+    } catch {}
+    pcRef.current = null;
+
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach(t => t.stop());
+    }
+    localStreamRef.current = null;
+
+    setIsMuted(false);
+  };
+
+  const ensurePeerConnection = async (callId: string, otherUserId: string) => {
+    // 1) Micro
+    if (!localStreamRef.current) {
+      localStreamRef.current = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const track = localStreamRef.current!.getAudioTracks()[0];
+
+console.log("🎤 local track:", {
+  enabled: track.enabled,
+  muted: (track as any).muted,
+  readyState: track.readyState,
+  label: track.label,
+});
+
+track.onmute = () => console.warn("🚫 local track muted (plus d'audio envoyé)");
+track.onunmute = () => console.warn("✅ local track unmuted (audio de retour)");
+track.onended = () => console.warn("🛑 local track ended");
+
+
+    }
+
+    // 2) PC
+    if (!pcRef.current) {
+      const pc = new RTCPeerConnection({
+        iceServers: [
+          { urls: "stun:stun.l.google.com:19302" },
+          { urls: "stun:stun1.l.google.com:19302" },
+          { urls: "stun:stun2.l.google.com:19302" },
+          { urls: "stun:stun3.l.google.com:19302" },
+          { urls: "stun:stun4.l.google.com:19302" },
+          // TURN alternatif
+          { urls: "turn:turn.bistri.com:80", username: "homeo", credential: "homeo" },
+          { urls: "turn:turn.bistri.com:443", username: "homeo", credential: "homeo" },
+        ],
+        
+      });
+      // ✅ Force une négociation audio correcte
+pc.addTransceiver("audio", { direction: "sendrecv" });
+
+console.log("🧩 initial connectionState:", pc.connectionState);
+console.log("🧊 initial ICE state:", pc.iceConnectionState);
+
+      // Push ICE -> DB
+      pc.onicecandidate = async (e) => {
+        if (!e.candidate || !user) return;
+        await supabase.from('webrtc_signals').insert({
+          call_id: callId,
+          sender_id: user.id,
+          receiver_id: otherUserId,
+          signal_type: 'ice_candidate',
+          signal_data: e.candidate
+        });
+      };
+
+      // Remote track
+pc.ontrack = async (event) => {
+  const [remoteStream] = event.streams;
+  console.log("🎧 ontrack fired", remoteStream);
+
+  const audio = remoteAudioRef.current;
+  if (!audio) {
+    console.warn("❌ remoteAudioRef est null");
+    return;
+  }
+
+  audio.srcObject = remoteStream;
+  const rTracks = remoteStream.getAudioTracks();
+console.log("🎚️ remote audio tracks:", rTracks.map(t => ({
+  id: t.id,
+  enabled: t.enabled,
+  muted: (t as any).muted,
+  readyState: t.readyState,
+  label: t.label
+})));
+
+  audio.muted = false;
+  audio.volume = 1;
+
+  // logs utiles
+  audio.onplay = () => console.log("▶️ remote audio playing");
+  audio.onpause = () => console.log("⏸️ remote audio paused");
+  audio.onloadedmetadata = () => console.log("ℹ️ metadata loaded, readyState=", audio.readyState);
+
+  try {
+    await audio.play();
+    console.log("✅ play() ok");
+  } catch (e) {
+    console.warn("🔇 play() bloqué (autoplay?)", e);
+  }
+};
+
+
+
+      // Add local track(s)
+      localStreamRef.current.getTracks().forEach(track => {
+        pc.addTrack(track, localStreamRef.current!);
+      });
+
+      pcRef.current = pc;
+      pc.oniceconnectionstatechange = () => {
+  console.log("🧊 ICE state:", pc.iceConnectionState);
+};
+
+pc.onicegatheringstatechange = () => {
+  console.log("🧊 gathering state:", pc.iceGatheringState);
+};
+
+pc.onsignalingstatechange = () => {
+  console.log("📡 signaling state:", pc.signalingState);
+};
+
+      pc.onconnectionstatechange = () => {
+  console.log("🧩 connectionState:", pc.connectionState);
+if (pc.connectionState === "connected") {
+  console.log("✅ WebRTC réellement connecté");
+  setCallStatus("connected");
+}
+if (pc.connectionState === "failed" || pc.connectionState === "disconnected") {
+  console.warn("❌ WebRTC failed/disconnected");
+}
+
+};
+
+    }
+  };
+
+  const startVoiceCall = async () => {
+    if (!user || !activeConversationUser) return;
+
+    try {
+      setCallStatus('calling');
+
+      // 1) create call row
+      const { data: call, error: callError } = await supabase
+        .from('voice_calls')
+        .insert({
+          caller_id: user.id,
+          receiver_id: activeConversationUser.id,
+          status: 'calling',
+        })
+        .select('*')
+        .single();
+
+      if (callError) throw callError;
+
+      setActiveCall(call);
+
+      // 2) setup WebRTC and send offer
+      await ensurePeerConnection(call.id, activeConversationUser.id);
+
+      const pc = pcRef.current!;
+      pc.oniceconnectionstatechange = () => {
+  console.log("🧊 ICE state:", pc.iceConnectionState);
+};
+
+pc.onconnectionstatechange = () => {
+  console.log("🔗 PC state:", pc.connectionState);
+};
+
+pc.onicecandidateerror = (e) => {
+  console.warn("🧊 ICE candidate error:", e);
+};
+
+const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+console.log('📤 Local description set for offer');
+
+setTimeout(() => {
+  setInterval(async () => {
+    const pc = pcRef.current;
+    if (!pc) return;
+
+    const stats = await pc.getStats();
+    for (const r of stats.values()) {
+      if (r.type === "outbound-rtp" && r.kind === "audio") {
+        console.log("📡 outbound audio:", { bytesSent: r.bytesSent, packetsSent: r.packetsSent });
+      }
+    }
+  }, 1000);
+}, 1000);
+
+      await supabase.from('webrtc_signals').insert({
+        call_id: call.id,
+        sender_id: user.id,
+        receiver_id: activeConversationUser.id,
+        signal_type: 'offer',
+        signal_data: offer,
+      });
+    } catch (e) {
+      console.error(e);
+      toast.error("Impossible de démarrer l'appel");
+      setCallStatus('idle');
+      setActiveCall(null);
+      cleanupWebRTC();
+    }
+  };
+
+  const acceptVoiceCall = async (call: VoiceCall) => {
+    if (!user) return;
+
+    try {
+setCallStatus('ringing'); // ou "connecting"
+      setActiveCall(call);
+      setIncomingCall(null);
+
+      // 1) mark connected
+      await supabase.from('voice_calls')
+        .update({ status: 'connected', started_at: new Date().toISOString() })
+        .eq('id', call.id);
+
+      // 2) prepare PC
+      const otherUserId = call.caller_id; // l’autre c’est le caller
+      await ensurePeerConnection(call.id, otherUserId);
+
+      // ✅ IMPORTANT: si l'offer a été envoyé AVANT qu'on accepte,
+// on doit le récupérer en BDD sinon on le "rate" et il n'y aura jamais de son.
+const { data: existingOffer, error: offerErr } = await supabase
+  .from('webrtc_signals')
+  .select('*')
+  .eq('call_id', call.id)
+  .eq('signal_type', 'offer')
+  .order('created_at', { ascending: false })
+  .limit(1)
+  .maybeSingle();
+
+if (offerErr) {
+  console.warn('⚠️ Erreur fetch offer:', offerErr);
+}
+
+if (existingOffer?.signal_data) {
+  const pc = pcRef.current!;
+  console.log('📥 Remote description set from fetched offer');
+  await pc.setRemoteDescription(existingOffer.signal_data);
+
+  const answer = await pc.createAnswer();
+  await pc.setLocalDescription(answer);
+console.log('📤 Local description set for answer in accept');
+
+  console.log('📤 Envoi answer depuis accept');
+  await supabase.from('webrtc_signals').insert({
+    call_id: call.id,
+    sender_id: user.id,
+    receiver_id: otherUserId,
+    signal_type: 'answer',
+    signal_data: answer,
+  });
+}
+
+
+    } catch (e) {
+      console.error(e);
+      toast.error("Erreur lors de l'acceptation");
+      setCallStatus('idle');
+      setActiveCall(null);
+      cleanupWebRTC();
+    }
+  };
+
+  const declineVoiceCall = async (call: VoiceCall) => {
+    try {
+      await supabase.from('voice_calls')
+        .update({ status: 'missed', ended_at: new Date().toISOString() })
+        .eq('id', call.id);
+    } catch {}
+    setIncomingCall(null);
+    setCallStatus('idle');
+  };
+
+  const hangupVoiceCall = async () => {
+    if (!activeCall) return;
+
+    try {
+      await supabase.from('voice_calls')
+        .update({ status: 'ended', ended_at: new Date().toISOString() })
+        .eq('id', activeCall.id);
+    } catch {}
+
+    setActiveCall(null);
+    setIncomingCall(null);
+    setCallStatus('idle');
+    cleanupWebRTC();
+  };
+
+  const toggleMute = () => {
+    const s = localStreamRef.current;
+    if (!s) return;
+    const enabled = isMuted; // si muted=true -> on veut réactiver
+    s.getAudioTracks().forEach(t => (t.enabled = enabled));
+    setIsMuted(!isMuted);
+  };
+
+
   // ✅ Gérer la sélection d'image pour message privé
   const handlePrivateImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -2698,8 +3137,29 @@ useEffect(() => {
       }
 
       if (existingEntry) {
-        console.warn('⚠️ Entrée déjà existante, aucune action nécessaire.');
-        toast.info('La conversation est déjà masquée.');
+        // Mettre à jour created_at pour permettre de "masquer à nouveau" (reset des messages)
+        const { error: updateError } = await supabase
+          .from('hidden_conversations')
+          .update({ created_at: new Date().toISOString() })
+          .eq('user_id', user.id)
+          .eq('hidden_user_id', odId);
+
+        if (updateError) {
+          console.error('❌ Erreur lors de la mise à jour de la suppression:', updateError);
+          toast.error('Erreur lors de la suppression');
+          // Recharger pour annuler le changement visuel
+          loadConversations();
+          return;
+        }
+
+        toast.success('Conversation masquée à nouveau.');
+        // Si la conversation masquée est celle actuellement ouverte, vider les messages pour la rendre vierge
+        if (activeConversation === odId) {
+          setPrivateMessages([]);
+          setNewPrivateMessage('');
+          setPrivateImagePreview(null);
+          setPrivateImageFile(null);
+        }
         return;
       }
 
@@ -2713,6 +3173,13 @@ useEffect(() => {
       
       if (error) throw error;
       toast.success('Conversation supprimée');
+      // Si la conversation supprimée est celle actuellement ouverte, vider les messages pour la rendre vierge
+      if (activeConversation === odId) {
+        setPrivateMessages([]);
+        setNewPrivateMessage('');
+        setPrivateImagePreview(null);
+        setPrivateImageFile(null);
+      }
     } catch (err) {
       console.error('❌ Erreur suppression conversation:', err);
       toast.error('Erreur lors de la suppression');
@@ -3286,13 +3753,76 @@ useEffect(() => {
                   <span>Messages privés</span>
                 </h2>
               )}
+              {activeConversation && activeConversationUser && (
+  <button
+    onClick={startVoiceCall}
+    className="text-white/80 hover:text-white transition-colors mr-3"
+    title="Appel vocal"
+  >
+    📞
+  </button>
+)}
+
               <button
                 onClick={closeMessagesModal}
                 className="text-white/80 hover:text-white transition-colors"
               >
                 <FaTimes size={20} />
               </button>
+              
             </div>
+
+            {/* 🎙️ Remote audio (caché) */}
+<audio ref={remoteAudioRef} autoPlay playsInline />
+
+{/* 📲 Incoming call banner */}
+{incomingCall && (
+  <div className="px-6 py-3 bg-yellow-50 border-b border-yellow-200 flex items-center justify-between">
+    <div className="text-sm text-yellow-800">
+      Appel entrant…
+    </div>
+    <div className="flex items-center gap-2">
+      <button
+        onClick={() => acceptVoiceCall(incomingCall)}
+        className="px-3 py-1 rounded-lg bg-green-600 text-white text-sm"
+      >
+        Accepter
+      </button>
+      <button
+        onClick={() => declineVoiceCall(incomingCall)}
+        className="px-3 py-1 rounded-lg bg-red-600 text-white text-sm"
+      >
+        Refuser
+      </button>
+    </div>
+  </div>
+)}
+
+{/* ✅ In-call controls */}
+{activeCall && callStatus !== 'idle' && (
+  <div className="px-6 py-3 bg-purple-50 border-b border-purple-200 flex items-center justify-between">
+    <div className="text-sm text-purple-800">
+      {callStatus === 'calling' && 'Appel en cours…'}
+      {callStatus === 'ringing' && 'Ça sonne…'}
+      {callStatus === 'connected' && 'En appel'}
+    </div>
+    <div className="flex items-center gap-2">
+      <button
+        onClick={toggleMute}
+        className="px-3 py-1 rounded-lg bg-white border text-sm"
+      >
+        {isMuted ? 'Unmute' : 'Mute'}
+      </button>
+      <button
+        onClick={hangupVoiceCall}
+        className="px-3 py-1 rounded-lg bg-red-600 text-white text-sm"
+      >
+        Raccrocher
+      </button>
+    </div>
+  </div>
+)}
+
 
             {/* Contenu */}
             {activeConversation && activeConversationUser ? (
@@ -4197,12 +4727,10 @@ useEffect(() => {
                       </form>
                     </div>
                   )}
-                  {/* ✅ Référence pour scroll automatique des commentaires */}
-                  <div ref={commentsEndRef} />
+                  {/* Référence de scroll des commentaires supprimée */}
                 </div>
               ))}
-              {/* ✅ Référence pour scroll automatique */}
-              <div ref={messagesEndRef} />
+              {/* Référence de scroll des messages publics supprimée */}
             </div>
           )}
         </div>

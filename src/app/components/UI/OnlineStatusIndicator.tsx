@@ -70,7 +70,6 @@ const OnlineStatusIndicator = ({
     : 'Hors ligne';
 
   // Ajout d'un log pour diagnostiquer les valeurs de lastSeen et du statut
-  console.log('🟢 OnlineStatusIndicator:', { lastSeen, status });
 
   return (
     <div

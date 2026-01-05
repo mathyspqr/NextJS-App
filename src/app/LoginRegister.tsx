@@ -107,7 +107,7 @@ const LoginRegister: React.FC<LoginRegisterProps> = ({ onLogin }) => {
     setIsLoading(true);
 
     try {
-      const { error } = await supabase.auth.signInWithOAuth({
+      const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
           redirectTo: typeof window !== 'undefined' 
@@ -117,6 +117,11 @@ const LoginRegister: React.FC<LoginRegisterProps> = ({ onLogin }) => {
       });
 
       if (error) throw error;
+
+      // Si Supabase retourne une URL de redirection (cas où le client ne redirige pas automatiquement), naviguer manuellement
+      if (data?.url) {
+        window.location.href = data.url;
+      }
     } catch (err: unknown) {
       setMessageType('error');
       setMessage((err as Error)?.message ?? 'Erreur de connexion Google');
