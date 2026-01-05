@@ -3856,7 +3856,7 @@ console.log('📤 Local description set for answer in accept');
       {callStatus === 'connected' && 'En appel'}
       {audioNeedsInteraction && (
         <div className="mt-1 text-xs text-orange-600 font-medium">
-          🔊 Touchez l'écran pour activer l'audio
+          🔊 Touchez l&apos;écran pour activer l&apos;audio
         </div>
       )}
     </div>
