@@ -10,7 +10,7 @@ import CountUp from 'react-countup';
 import LoginRegister from './LoginRegister';
 import { createClient } from '../app/utils/supabase/client';
 import OnlineStatusIndicator from './components/UI/OnlineStatusIndicator';
-import { ONLINE_THRESHOLD_SECONDS, ONLINE_THRESHOLD_MS } from './constants/onlineStatus';
+import { ONLINE_THRESHOLD_MS } from './constants/onlineStatus';
 
 const supabase = createClient();
 
@@ -1617,8 +1617,8 @@ const Page = () => {
         throw new Error(`Erreur ajout commentaire (${response.status}) : ${txt}`);
       }
 
-      // ✅ Récupérer l'ID du nouveau commentaire
-      const newCommentData = await response.json();
+      // ✅ Consommer la réponse (le realtime ajoutera le commentaire)
+      await response.json();
 
       toast.info('💬 Commentaire ajouté !', { autoClose: CONFETTI_DURATION });
       setNewComment('');
@@ -1639,7 +1639,7 @@ const Page = () => {
   };
 
 // ✅ Mise à jour du statut en ligne
-const updateOnlineStatus = async () => {
+const updateOnlineStatus = useCallback(async () => {
   if (!user) return;
 
   const now = new Date().toISOString();
@@ -1692,7 +1692,7 @@ const updateOnlineStatus = async () => {
   } catch (err) {
     console.error('❌ Erreur mise à jour last_seen:', err);
   }
-};
+}, [user, viewingProfile]);
 
 
   // ✅ Mise à jour lors de l'activité utilisateur (throttled à 30 secondes)
@@ -2254,7 +2254,7 @@ useEffect(() => {
   };
 
   // ✅ Charger les utilisateurs en ligne
-  const loadOnlineUsers = async () => {
+  const loadOnlineUsers = useCallback(async () => {
     if (!user) return;
     setLoadingOnlineUsers(true);
 
@@ -2297,7 +2297,7 @@ useEffect(() => {
     } finally {
       setLoadingOnlineUsers(false);
     }
-  };
+  }, [user]);
 
   // ✅ Envoyer une demande d'ami
   const sendFriendRequest = async (targetUserId: string) => {

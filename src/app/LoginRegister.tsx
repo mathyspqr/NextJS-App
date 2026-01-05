@@ -45,13 +45,31 @@ const LoginRegister: React.FC<LoginRegisterProps> = ({ onLogin }) => {
         if (error) throw error;
 
         const u = data.user;
+        
+        // Récupérer la couleur, avatar et bio depuis profiles
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('color, avatar_url, bio, last_seen')
+          .eq('id', u?.id)
+          .single();
+        
+        // Valeurs par défaut si le profil n'existe pas encore
+        const userColor = profile?.color || '#3B82F6';
+        const userAvatar = profile?.avatar_url || null;
+        const userBio = profile?.bio || '';
+        const userLastSeen = profile?.last_seen || null;
+        
+        if (profileError && profileError.code !== 'PGRST116') { // PGRST116 = not found
+          console.warn('Erreur récupération profil:', profileError);
+        }
+        
         onLogin({
           id: u?.id ?? '',
           name: (u?.user_metadata?.username as string) ?? u?.email ?? 'Utilisateur',
-          color: undefined,
-          avatar_url: undefined,
-          bio: undefined,
-          last_seen: null,
+          color: userColor,
+          avatar_url: userAvatar,
+          bio: userBio,
+          last_seen: userLastSeen,
         });
 
         setMessageType('success');
