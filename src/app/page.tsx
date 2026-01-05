@@ -139,7 +139,7 @@ interface WebRTCSignal {
   sender_id: string;
   receiver_id: string;
   signal_type: 'offer' | 'answer' | 'ice_candidate';
-  signal_data: any; // SDP / ICE candidate
+  signal_data: RTCSessionDescriptionInit | RTCIceCandidateInit | null;
   created_at: string;
 }
 
@@ -236,7 +236,6 @@ const Page = () => {
   const profileModalRef = useRef<HTMLDivElement>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
   const [usersTyping, setUsersTyping] = useState<Record<string, string>>({});
-  const [lastCommentCount, setLastCommentCount] = useState(0);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const typingBroadcastInterval = useRef<NodeJS.Timeout | null>(null);
@@ -765,6 +764,52 @@ const Page = () => {
     };
   }, [isAuthenticated, user]);
 
+  // ✅ Charger les utilisateurs en ligne
+  const loadOnlineUsers = useCallback(async () => {
+    if (!user) return;
+    setLoadingOnlineUsers(true);
+
+    try {
+      // Récupérer tous les utilisateurs en ligne (actifs dans les dernières secondes configurées)
+      const thresholdAgo = new Date(Date.now() - ONLINE_THRESHOLD_MS).toISOString();
+      
+      // Récupérer les IDs de tous les amis
+      const { data: friendships } = await supabase
+        .from('friendships')
+        .select('requester_id, addressee_id, status')
+        .or(`requester_id.eq.${user.id},addressee_id.eq.${user.id}`)
+        .eq('status', 'accepted');
+      
+      // Créer un Set des IDs d'amis
+      const friendIds = new Set<string>();
+      friendships?.forEach(f => {
+        friendIds.add(f.requester_id === user.id ? f.addressee_id : f.requester_id);
+      });
+      
+      // Récupérer tous les utilisateurs en ligne sauf soi-même
+      const { data: users, error } = await supabase
+        .from('profiles')
+        .select('id, username, color, avatar_url, bio, last_seen')
+        .gte('last_seen', thresholdAgo)
+        .neq('id', user.id);
+
+      if (error) throw error;
+
+      // Ajouter l'info si c'est un ami
+      const usersWithFriendStatus = (users || []).map(u => ({
+        ...u,
+        isFriend: friendIds.has(u.id)
+      }));
+
+      setOnlineUsers(usersWithFriendStatus);
+    } catch (err) {
+      console.error('❌ Erreur chargement utilisateurs en ligne:', err);
+      toast.error('Erreur lors du chargement des utilisateurs');
+    } finally {
+      setLoadingOnlineUsers(false);
+    }
+  }, [user]);
+
   // ✅ Realtime - Statut en ligne (last_seen) en temps réel
   useEffect(() => {
     if (!isAuthenticated || !user) return;
@@ -851,7 +896,7 @@ const Page = () => {
     return () => {
       supabase.removeChannel(onlineStatusChannel);
     };
-  }, [isAuthenticated, user, activeConversationUser, viewingProfile]);
+  }, [isAuthenticated, user, activeConversationUser, viewingProfile, loadOnlineUsers]);
 
   // ✅ Realtime - Changements de profil en temps réel
   useEffect(() => {
@@ -1182,7 +1227,7 @@ const Page = () => {
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'voice_calls' },
         (payload) => {
-          const call = payload.new as any as VoiceCall;
+          const call = payload.new as VoiceCall;
 
           // Si c'est un appel entrant pour moi
           if (call.receiver_id === user.id && call.status === 'calling') {
@@ -1195,7 +1240,7 @@ const Page = () => {
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'voice_calls' },
         (payload) => {
-          const call = payload.new as any as VoiceCall;
+          const call = payload.new as VoiceCall;
 
           // si l'appel actif est terminé
           if (activeCall?.id === call.id && (call.status === 'ended' || call.status === 'missed')) {
@@ -1226,7 +1271,7 @@ const Page = () => {
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'webrtc_signals' },
         async (payload) => {
-          const sig = payload.new as any as WebRTCSignal;
+          const sig = payload.new as WebRTCSignal;
 
           // ignorer si ce signal n'est pas pour moi ou pas sur cet appel
           if (sig.call_id !== currentCall.id) return;
@@ -1242,7 +1287,7 @@ const Page = () => {
 
             if (sig.signal_type === 'offer') {
               console.log('📥 Remote description set from offer');
-              await pc.setRemoteDescription(sig.signal_data);
+              await pc.setRemoteDescription(sig.signal_data as RTCSessionDescriptionInit);
               // Appliquer ICE bufferisés maintenant que remoteDescription existe
 for (const c of pendingIceRef.current) {
   try { await pc.addIceCandidate(c); console.log('🧊 ICE buffered ajouté'); } catch (e) { console.warn("ICE buffered failed", e); }
@@ -1265,7 +1310,7 @@ console.log('📤 Local description set for answer');
 
             if (sig.signal_type === 'answer') {
               console.log('📥 Remote description set from answer');
-              await pc.setRemoteDescription(sig.signal_data);
+              await pc.setRemoteDescription(sig.signal_data as RTCSessionDescriptionInit);
               // Appliquer ICE bufferisés maintenant que remoteDescription existe
 for (const c of pendingIceRef.current) {
   try { await pc.addIceCandidate(c); console.log('🧊 ICE buffered ajouté'); } catch (e) { console.warn("ICE buffered failed", e); }
@@ -1278,11 +1323,11 @@ pendingIceRef.current = [];
 console.log('🧊 ICE reçu de', sig.sender_id);
 if (!pc.remoteDescription) {
   // Pas encore de remoteDescription -> on bufferise
-  pendingIceRef.current.push(sig.signal_data);
+  pendingIceRef.current.push(sig.signal_data as RTCIceCandidateInit);
   return;
 }
 
-await pc.addIceCandidate(sig.signal_data);
+await pc.addIceCandidate(sig.signal_data as RTCIceCandidateInit);
 console.log('🧊 ICE candidate ajouté');
             }
           } catch (e) {
@@ -1713,9 +1758,6 @@ console.log('🧊 ICE candidate ajouté');
       // ✅ Ouvrir immédiatement l'interface (optimistic UI)
       setCommentingMessageId(id);
       setClosingMessageId(null); // reset
-      
-      // ✅ Remettre le compteur de commentaires à 0 pour le scroll
-      setLastCommentCount(0);
       
       // ✅ Charger les commentaires en arrière-plan
       await fetchCommentaires(id);
@@ -2338,52 +2380,6 @@ useEffect(() => {
       setLoadingFriends(false);
     }
   };
-
-  // ✅ Charger les utilisateurs en ligne
-  const loadOnlineUsers = useCallback(async () => {
-    if (!user) return;
-    setLoadingOnlineUsers(true);
-
-    try {
-      // Récupérer tous les utilisateurs en ligne (actifs dans les dernières secondes configurées)
-      const thresholdAgo = new Date(Date.now() - ONLINE_THRESHOLD_MS).toISOString();
-      
-      // Récupérer les IDs de tous les amis
-      const { data: friendships } = await supabase
-        .from('friendships')
-        .select('requester_id, addressee_id, status')
-        .or(`requester_id.eq.${user.id},addressee_id.eq.${user.id}`)
-        .eq('status', 'accepted');
-      
-      // Créer un Set des IDs d'amis
-      const friendIds = new Set<string>();
-      friendships?.forEach(f => {
-        friendIds.add(f.requester_id === user.id ? f.addressee_id : f.requester_id);
-      });
-      
-      // Récupérer tous les utilisateurs en ligne sauf soi-même
-      const { data: users, error } = await supabase
-        .from('profiles')
-        .select('id, username, color, avatar_url, bio, last_seen')
-        .gte('last_seen', thresholdAgo)
-        .neq('id', user.id);
-
-      if (error) throw error;
-
-      // Ajouter l'info si c'est un ami
-      const usersWithFriendStatus = (users || []).map(u => ({
-        ...u,
-        isFriend: friendIds.has(u.id)
-      }));
-
-      setOnlineUsers(usersWithFriendStatus);
-    } catch (err) {
-      console.error('❌ Erreur chargement utilisateurs en ligne:', err);
-      toast.error('Erreur lors du chargement des utilisateurs');
-    } finally {
-      setLoadingOnlineUsers(false);
-    }
-  }, [user]);
 
 // ✅ Realtime broadcast listener pour 'user_active' (activité utilisateur instantanée)
 useEffect(() => {
