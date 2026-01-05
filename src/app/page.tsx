@@ -1885,54 +1885,6 @@ useEffect(() => {
     };
 }, [user?.id, handleUserActivity, user]);
 
-// ✅ Realtime broadcast listener pour 'user_active' (activité utilisateur instantanée)
-useEffect(() => {
-  if (!isAuthenticated || !user) return;
-
-  const activityChannel = supabase
-    .channel('public-online-activity')
-    .on('broadcast', { event: 'user_active' }, ({ payload }) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { userId, lastSeen } = payload as any;
-      if (!userId || !lastSeen) return;
-
-      console.log('📣 Reçu broadcast user_active:', { userId, lastSeen });
-
-      // Mettre à jour partout où apparaît cet utilisateur
-      setFriends(prev => prev.map(f => f.id === userId ? { ...f, last_seen: lastSeen } : f));
-      setConversations(prev => prev.map(conv => conv.odId === userId ? { ...conv, odLastSeen: lastSeen } : conv));
-      setMessages(prev => prev.map(msg => msg.user_id === userId ? { ...msg, last_seen: lastSeen } : msg));
-      if (activeConversationUser && activeConversationUser.id === userId) {
-        setActiveConversationUser(prev => prev ? { ...prev, last_seen: lastSeen } : null);
-      }
-      if (viewingProfile && viewingProfile.id === userId) {
-        setViewingProfile(prev => prev ? { ...prev, last_seen: lastSeen } : null);
-      }
-
-      setOnlineUsers(prev => {
-        const thresholdAgo = Date.now() - ONLINE_THRESHOLD_MS;
-        const lastSeenTime = new Date(lastSeen).getTime();
-        const isOnline = lastSeenTime >= thresholdAgo;
-
-        const existingIndex = prev.findIndex(u => u.id === userId);
-        if (existingIndex >= 0) {
-          if (isOnline) return prev.map(u => u.id === userId ? { ...u, last_seen: lastSeen } : u);
-          return prev.filter(u => u.id !== userId);
-        } else if (isOnline) {
-          // si on ne le connaissait pas et qu'il est online, recharger
-          loadOnlineUsers();
-          return prev;
-        }
-        return prev;
-      });
-    })
-    .subscribe();
-
-  return () => {
-    supabase.removeChannel(activityChannel);
-  };
-}, [isAuthenticated, user, activeConversationUser, viewingProfile, loadOnlineUsers]);
-
   const handleLogout = async () => {
     closeUserMenu();
     await supabase.auth.signOut();
@@ -2432,6 +2384,54 @@ useEffect(() => {
       setLoadingOnlineUsers(false);
     }
   }, [user]);
+
+// ✅ Realtime broadcast listener pour 'user_active' (activité utilisateur instantanée)
+useEffect(() => {
+  if (!isAuthenticated || !user) return;
+
+  const activityChannel = supabase
+    .channel('public-online-activity')
+    .on('broadcast', { event: 'user_active' }, ({ payload }) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { userId, lastSeen } = payload as any;
+      if (!userId || !lastSeen) return;
+
+      console.log('📣 Reçu broadcast user_active:', { userId, lastSeen });
+
+      // Mettre à jour partout où apparaît cet utilisateur
+      setFriends(prev => prev.map(f => f.id === userId ? { ...f, last_seen: lastSeen } : f));
+      setConversations(prev => prev.map(conv => conv.odId === userId ? { ...conv, odLastSeen: lastSeen } : conv));
+      setMessages(prev => prev.map(msg => msg.user_id === userId ? { ...msg, last_seen: lastSeen } : msg));
+      if (activeConversationUser && activeConversationUser.id === userId) {
+        setActiveConversationUser(prev => prev ? { ...prev, last_seen: lastSeen } : null);
+      }
+      if (viewingProfile && viewingProfile.id === userId) {
+        setViewingProfile(prev => prev ? { ...prev, last_seen: lastSeen } : null);
+      }
+
+      setOnlineUsers(prev => {
+        const thresholdAgo = Date.now() - ONLINE_THRESHOLD_MS;
+        const lastSeenTime = new Date(lastSeen).getTime();
+        const isOnline = lastSeenTime >= thresholdAgo;
+
+        const existingIndex = prev.findIndex(u => u.id === userId);
+        if (existingIndex >= 0) {
+          if (isOnline) return prev.map(u => u.id === userId ? { ...u, last_seen: lastSeen } : u);
+          return prev.filter(u => u.id !== userId);
+        } else if (isOnline) {
+          // si on ne le connaissait pas et qu'il est online, recharger
+          loadOnlineUsers();
+          return prev;
+        }
+        return prev;
+      });
+    })
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(activityChannel);
+  };
+}, [isAuthenticated, user, activeConversationUser, viewingProfile, loadOnlineUsers]);
 
   // ✅ Envoyer une demande d'ami
   const sendFriendRequest = async (targetUserId: string) => {
