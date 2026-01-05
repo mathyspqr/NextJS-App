@@ -2394,10 +2394,10 @@ useEffect(() => {
   };
 
   // ✅ Ouvrir la modale amis
-  const openFriendsModal = () => {
-    setShowFriendsModal(true);
-    loadFriends();
-  };
+  // const openFriendsModal = () => {
+  //   setShowFriendsModal(true);
+  //   loadFriends();
+  // };
 
   // ✅ Charger les conversations
   const loadConversations = async () => {
