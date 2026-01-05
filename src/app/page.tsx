@@ -2743,7 +2743,10 @@ useEffect(() => {
       const localAudioTrack = localStreamRef.current.getAudioTracks()[0];
       if (localAudioTrack) {
         console.log("🎙️ Adding local audio transceiver to peer connection");
+        console.log("🎙️ Local track enabled:", localAudioTrack.enabled, "readyState:", localAudioTrack.readyState);
         pc.addTransceiver(localAudioTrack, { direction: 'sendonly' });
+      } else {
+        console.warn("⚠️ No local audio track found");
       }
 
       // 4) Handle remote tracks
@@ -2752,27 +2755,36 @@ useEffect(() => {
         console.log("🎧 Track enabled:", event.track.enabled, "readyState:", event.track.readyState);
 
         if (event.track.kind === 'audio') {
-          // Use the stream from the event if available, otherwise create one
-          if (event.streams && event.streams.length > 0) {
-            remoteStreamRef.current = event.streams[0];
-            console.log("🎧 Using stream from event, tracks:", event.streams[0].getTracks().length);
-          } else {
-            // Fallback: create new stream and add track
-            if (!remoteStreamRef.current) {
-              remoteStreamRef.current = new MediaStream();
+          console.log("🎧 Remote track received - creating dedicated audio stream");
+
+          // Always create a new MediaStream with just this audio track
+          remoteStreamRef.current = new MediaStream([event.track]);
+          console.log("🎧 Created new MediaStream with remote audio track, tracks:", remoteStreamRef.current.getTracks().length);
+
+          // Add event listeners to the remote track for debugging
+          event.track.onmute = () => console.log("🎧 Remote audio track muted");
+          event.track.onunmute = () => console.log("🎧 Remote audio track unmuted");
+          event.track.onended = () => console.log("🎧 Remote audio track ended");
+
+          // Check if track has audio data periodically
+          const checkAudioLevel = () => {
+            if (remoteAudioRef.current && !remoteAudioRef.current.paused) {
+              console.log("🎧 Audio element status - playing:", !remoteAudioRef.current.paused, "volume:", remoteAudioRef.current.volume, "muted:", remoteAudioRef.current.muted);
             }
-            remoteStreamRef.current.addTrack(event.track);
-            console.log("🎧 Created/fallback stream, total tracks:", remoteStreamRef.current.getTracks().length);
-          }
+          };
+          setTimeout(checkAudioLevel, 1000);
+          setTimeout(checkAudioLevel, 3000);
 
           // Connect to audio element
           const audioElement = remoteAudioRef.current;
           if (audioElement) {
+            // Clear any previous srcObject
+            audioElement.srcObject = null;
+            // Set the new stream
             audioElement.srcObject = remoteStreamRef.current;
             audioElement.volume = 1.0;
             audioElement.muted = false;
             console.log("🎧 Audio element configured - volume:", audioElement.volume, "muted:", audioElement.muted);
-            console.log("🎧 Remote stream tracks:", remoteStreamRef.current.getTracks().length);
 
             // Add event listeners for debugging
             audioElement.onplaying = () => console.log("🎧 Audio element started playing");
@@ -2780,13 +2792,12 @@ useEffect(() => {
             audioElement.onended = () => console.log("🎧 Audio element ended");
             audioElement.onerror = (e) => console.error("🎧 Audio element error:", e);
 
-            // Try to play (may be blocked by browser policy)
+            // Force play
             audioElement.play().then(() => {
               console.log("🎧 Audio playback started successfully");
               console.log("🎧 Audio element playing:", !audioElement.paused, "currentTime:", audioElement.currentTime);
             }).catch(e => {
-              console.warn("🔇 Auto-play blocked, user interaction required:", e);
-              // Note: In production, you might want to show a play button
+              console.warn("🔇 Auto-play blocked:", e);
             });
 
             console.log("🎧 Remote audio connected to audio element");
