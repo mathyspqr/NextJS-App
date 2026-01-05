@@ -2988,7 +2988,7 @@ useEffect(() => {
         });
         
         // Vérifier les transceivers
-        const transceivers = pc.getTransceivers();
+        const transceivers = pcRef.current!.getTransceivers();
         console.log("📤 Before offer - Transceivers:");
         transceivers.forEach((t, i) => {
           console.log(`📤 Transceiver ${i}: direction=${t.direction}, currentDirection=${t.currentDirection}`);
@@ -3068,14 +3068,11 @@ console.log('📤 Local description set for answer in accept');
     });
     
     // Vérifier les transceivers
-    const pc = pcRef.current;
-    if (pc) {
-      const transceivers = pc.getTransceivers();
-      console.log("📤 Before answer - Transceivers:");
-      transceivers.forEach((t, i) => {
-        console.log(`📤 Transceiver ${i}: direction=${t.direction}, currentDirection=${t.currentDirection}`);
-      });
-    }
+    const transceivers = pc.getTransceivers();
+    console.log("📤 Before answer - Transceivers:");
+    transceivers.forEach((t, i) => {
+      console.log(`📤 Transceiver ${i}: direction=${t.direction}, currentDirection=${t.currentDirection}`);
+    });
   }
 
   console.log('📤 Envoi answer depuis accept');
