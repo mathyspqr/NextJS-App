@@ -2895,19 +2895,29 @@ useEffect(() => {
               const pc = pcRef.current;
               if (pc && pc.connectionState === 'connected') {
                 const stats = await pc.getStats();
-                let inboundAudioStats = null;
+                let inboundAudioStats: {
+                  bytesReceived?: number;
+                  packetsReceived?: number;
+                  packetsLost?: number;
+                  jitter?: number;
+                  totalAudioEnergy?: number;
+                  totalSamplesReceived?: number;
+                } | null = null;
+                
                 stats.forEach(report => {
                   if (report.type === 'inbound-rtp' && report.kind === 'audio') {
+                    const rtpReport = report as RTCInboundRtpStreamStats;
                     inboundAudioStats = {
-                      bytesReceived: report.bytesReceived,
-                      packetsReceived: report.packetsReceived,
-                      packetsLost: report.packetsLost,
-                      jitter: report.jitter,
-                      totalAudioEnergy: report.totalAudioEnergy,
-                      totalSamplesReceived: report.totalSamplesReceived
+                      bytesReceived: rtpReport.bytesReceived,
+                      packetsReceived: rtpReport.packetsReceived,
+                      packetsLost: rtpReport.packetsLost,
+                      jitter: rtpReport.jitter,
+                      totalAudioEnergy: (rtpReport as any).totalAudioEnergy,
+                      totalSamplesReceived: (rtpReport as any).totalSamplesReceived
                     };
                   }
                 });
+                
                 if (inboundAudioStats) {
                   console.log("📊 Inbound audio stats:", inboundAudioStats);
                   if (inboundAudioStats.bytesReceived === 0) {
@@ -3057,21 +3067,32 @@ useEffect(() => {
           setTimeout(async () => {
             try {
               const stats = await pc.getStats();
-              let inboundStats = null;
-              let outboundStats = null;
+              let inboundStats: {
+                bytesReceived?: number;
+                packetsReceived?: number;
+                packetsLost?: number;
+                jitter?: number;
+              } | null = null;
+              let outboundStats: {
+                bytesSent?: number;
+                packetsSent?: number;
+              } | null = null;
+              
               stats.forEach(report => {
                 if (report.type === 'inbound-rtp' && report.kind === 'audio') {
+                  const rtpReport = report as RTCInboundRtpStreamStats;
                   inboundStats = {
-                    bytesReceived: report.bytesReceived,
-                    packetsReceived: report.packetsReceived,
-                    packetsLost: report.packetsLost,
-                    jitter: report.jitter
+                    bytesReceived: rtpReport.bytesReceived,
+                    packetsReceived: rtpReport.packetsReceived,
+                    packetsLost: rtpReport.packetsLost,
+                    jitter: rtpReport.jitter
                   };
                 }
                 if (report.type === 'outbound-rtp' && report.kind === 'audio') {
+                  const rtpReport = report as RTCOutboundRtpStreamStats;
                   outboundStats = {
-                    bytesSent: report.bytesSent,
-                    packetsSent: report.packetsSent
+                    bytesSent: rtpReport.bytesSent,
+                    packetsSent: rtpReport.packetsSent
                   };
                 }
               });
