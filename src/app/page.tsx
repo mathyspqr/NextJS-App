@@ -178,8 +178,6 @@ const Page = () => {
   const [isMuted, setIsMuted] = useState(false);
   const [microphoneActive, setMicrophoneActive] = useState(false);
   const [audioNeedsInteraction, setAudioNeedsInteraction] = useState(false);
-  const [remoteAudioPlaying, setRemoteAudioPlaying] = useState(false);
-  const [microphoneDetected, setMicrophoneDetected] = useState<boolean | null>(null);
 
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const pendingIceRef = useRef<RTCIceCandidateInit[]>([]);
@@ -2678,36 +2676,31 @@ useEffect(() => {
     }
   };
 
-    const testMicrophone = async () => {
-    console.log("🧪 Testing microphone...");
+    const cleanupWebRTC = () => {
     try {
-      // Test getUserMedia
-      const testStream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true
-        }
-      });
-      
-      const tracks = testStream.getAudioTracks();
-      console.log("🧪 Test successful - got", tracks.length, "audio tracks");
-      
-      tracks.forEach((track, i) => {
-        console.log(`🧪 Track ${i}: ${track.label}, enabled=${track.enabled}, readyState=${track.readyState}`);
-        console.log(`🧪 Track ${i} settings:`, track.getSettings());
-      });
-      
-      // Stop test stream
-      testStream.getTracks().forEach(track => track.stop());
-      
-      setMicrophoneDetected(true);
-      return true;
-    } catch (error) {
-      console.error("🧪 Microphone test failed:", error);
-      setMicrophoneDetected(false);
-      return false;
+      pcRef.current?.close();
+    } catch {}
+    pcRef.current = null;
+
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach(t => t.stop());
     }
+    localStreamRef.current = null;
+
+    if (remoteStreamRef.current) {
+      remoteStreamRef.current.getTracks().forEach(t => t.stop());
+    }
+    remoteStreamRef.current = null;
+
+    // Clear audio element
+    if (remoteAudioRef.current) {
+      remoteAudioRef.current.srcObject = null;
+    }
+
+    pendingIceRef.current = [];
+    setIsMuted(false);
+    setMicrophoneActive(false);
+    setAudioNeedsInteraction(false);
   };
 
   const ensurePeerConnection = async (callId: string, otherUserId: string) => {
@@ -2721,46 +2714,22 @@ useEffect(() => {
       const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
       console.log("📱 Device type:", isMobile ? "Mobile" : "Desktop");
       
-      // Check available audio devices
-      try {
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        const audioInputs = devices.filter(device => device.kind === 'audioinput');
-        console.log("🎤 Available audio input devices:", audioInputs.length);
-        audioInputs.forEach((device, i) => {
-          console.log(`🎤 Device ${i}: ${device.label || 'Unknown'} (id: ${device.deviceId})`);
-        });
-      } catch (e) {
-        console.warn("⚠️ Could not enumerate audio devices:", e);
-      }
-      
       try {
         localStreamRef.current = await navigator.mediaDevices.getUserMedia({
-          audio: isMobile ? {
+          audio: {
             echoCancellation: true,
             noiseSuppression: true,
             autoGainControl: true,
-            // Less restrictive constraints for mobile
-            sampleRate: { ideal: 16000, min: 8000 },
+            sampleRate: isMobile ? 16000 : 44100, // Lower sample rate for mobile
             channelCount: 1,
-            // Note: latency is not a valid MediaTrackConstraints property
-            // volume: { ideal: 1.0 }
-          } : {
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true,
-            sampleRate: 44100,
-            channelCount: 1
+            // Additional constraints for mobile
+            ...(isMobile && {
+              latency: 0.01,
+              volume: 1.0
+            })
           }
         });
         console.log("🎤 Microphone access granted");
-        
-        // Verify the stream
-        const audioTracks = localStreamRef.current.getAudioTracks();
-        console.log("🎤 Stream has", audioTracks.length, "audio tracks");
-        audioTracks.forEach((track, i) => {
-          console.log(`🎤 Track ${i}: ${track.label}, enabled=${track.enabled}, readyState=${track.readyState}`);
-        });
-        
       } catch (error) {
         console.error("❌ Microphone access denied:", error);
         throw new Error("Microphone access required for voice calls");
@@ -2791,7 +2760,6 @@ useEffect(() => {
         console.log("🎙️ Local track enabled:", localAudioTrack.enabled, "readyState:", localAudioTrack.readyState, "muted:", localAudioTrack.muted);
         console.log("🎙️ Local track settings:", localAudioTrack.getSettings());
         console.log("🎙️ Local track constraints:", localAudioTrack.getConstraints());
-        console.log("🎙️ Local track capabilities:", localAudioTrack.getCapabilities ? localAudioTrack.getCapabilities() : 'N/A');
 
         // Add event listeners to local track
         localAudioTrack.onmute = () => console.log("🎙️ Local audio track muted");
@@ -2800,14 +2768,14 @@ useEffect(() => {
 
         pc.addTransceiver(localAudioTrack, { direction: 'sendonly' });
         console.log("🎙️ Transceiver added successfully");
-
+        
         // Vérifier les transceivers après ajout
         const transceivers = pc.getTransceivers();
         console.log("🎙️ Total transceivers:", transceivers.length);
         transceivers.forEach((t, i) => {
           console.log(`🎙️ Transceiver ${i}: direction=${t.direction}, mid=${t.mid}`);
           if (t.sender && t.sender.track) {
-            console.log(`🎙️ Transceiver ${i} sender track: ${t.sender.track.kind}, enabled=${t.sender.track.enabled}, readyState=${t.sender.track.readyState}, id=${t.sender.track.id}`);
+            console.log(`🎙️ Transceiver ${i} sender track: ${t.sender.track.kind}, enabled=${t.sender.track.enabled}`);
           }
         });
       } else {
@@ -2819,19 +2787,21 @@ useEffect(() => {
         console.log("🎧 Remote track received:", event.track.kind, "from", event.streams.length, "streams");
         console.log("🎧 Remote track enabled:", event.track.enabled, "readyState:", event.track.readyState, "muted:", event.track.muted);
         console.log("🎧 Remote track settings:", event.track.getSettings());
-        console.log("🎧 Remote track id:", event.track.id, "label:", event.track.label);
-
+        
         // Vérifier les transceivers pour les tracks distants
         const transceivers = pc.getTransceivers();
         transceivers.forEach((t, i) => {
           if (t.receiver && t.receiver.track) {
-            console.log(`🎧 Transceiver ${i} receiver track: ${t.receiver.track.kind}, enabled=${t.receiver.track.enabled}, readyState=${t.receiver.track.readyState}, id=${t.receiver.track.id}`);
+            console.log(`🎧 Transceiver ${i} receiver track: ${t.receiver.track.kind}, enabled=${t.receiver.track.enabled}, readyState=${t.receiver.track.readyState}`);
           }
         });
 
-        // Always create a new MediaStream with just this audio track
-        remoteStreamRef.current = new MediaStream([event.track]);
-        console.log("🎧 Created new MediaStream with remote audio track, tracks:", remoteStreamRef.current.getTracks().length);
+        if (event.track.kind === 'audio') {
+          console.log("🎧 Remote track received - creating dedicated audio stream");
+
+          // Always create a new MediaStream with just this audio track
+          remoteStreamRef.current = new MediaStream([event.track]);
+          console.log("🎧 Created new MediaStream with remote audio track, tracks:", remoteStreamRef.current.getTracks().length);
 
           // Add event listeners to the remote track for debugging
           event.track.onmute = () => console.log("🎧 Remote audio track muted");
@@ -2859,26 +2829,13 @@ useEffect(() => {
             console.log("🎧 Audio element configured - volume:", audioElement.volume, "muted:", audioElement.muted);
 
             // Add event listeners for debugging
-            audioElement.onplaying = () => {
-              console.log("🎧 Audio element started playing");
-              setRemoteAudioPlaying(true);
-            };
-            audioElement.onpause = () => {
-              console.log("🎧 Audio element paused");
-              setRemoteAudioPlaying(false);
-            };
-            audioElement.onended = () => {
-              console.log("🎧 Audio element ended");
-              setRemoteAudioPlaying(false);
-            };
-            audioElement.onerror = (e) => {
-              console.error("🎧 Audio element error:", e);
-              setRemoteAudioPlaying(false);
-            };
+            audioElement.onplaying = () => console.log("🎧 Audio element started playing");
+            audioElement.onpause = () => console.log("🎧 Audio element paused");
+            audioElement.onended = () => console.log("🎧 Audio element ended");
+            audioElement.onerror = (e) => console.error("🎧 Audio element error:", e);
             audioElement.onwaiting = () => console.log("🎧 Audio element waiting for data");
             audioElement.oncanplay = () => console.log("🎧 Audio element can play");
             audioElement.oncanplaythrough = () => console.log("🎧 Audio element can play through");
-            audioElement.onvolumechange = () => console.log("🎧 Audio volume changed:", audioElement.volume, "muted:", audioElement.muted);
 
             // Force play with error handling for mobile
             const playPromise = audioElement.play();
@@ -2913,10 +2870,11 @@ useEffect(() => {
           } else {
             console.warn("⚠️ Remote audio element not found");
           }
+        }
       };
 
       // 5) Handle ICE candidates
-      pc.onicecandidate = async (event: RTCPeerConnectionIceEvent) => {
+      pc.onicecandidate = async (event) => {
         if (event.candidate && user) {
           console.log("🧊 Sending ICE candidate");
           try {
@@ -2938,12 +2896,11 @@ useEffect(() => {
         console.log("🧩 Connection state:", pc.connectionState);
         if (pc.connectionState === 'connected') {
           console.log("✅ WebRTC fully connected!");
-          setCallStatus('connected');
           
           // Vérifier l'état de tous les transceivers une fois connecté
           const transceivers = pc.getTransceivers();
           console.log("✅ Connected - Transceivers status:");
-          transceivers.forEach((t: RTCRtpTransceiver, i: number) => {
+          transceivers.forEach((t, i) => {
             console.log(`✅ Transceiver ${i}: direction=${t.direction}, currentDirection=${t.currentDirection}`);
             if (t.sender && t.sender.track) {
               console.log(`✅ Sender track ${i}: ${t.sender.track.kind}, enabled=${t.sender.track.enabled}, readyState=${t.sender.track.readyState}`);
@@ -2957,7 +2914,21 @@ useEffect(() => {
           setTimeout(async () => {
             try {
               const stats = await pc.getStats();
-              console.log("📊 WebRTC connection established with", stats.size, "stats reports");
+              stats.forEach(report => {
+                if (report.type === 'inbound-rtp' && report.kind === 'audio') {
+                  console.log("📊 Inbound audio stats:", {
+                    bytesReceived: report.bytesReceived,
+                    packetsReceived: report.packetsReceived,
+                    packetsLost: report.packetsLost
+                  });
+                }
+                if (report.type === 'outbound-rtp' && report.kind === 'audio') {
+                  console.log("📊 Outbound audio stats:", {
+                    bytesSent: report.bytesSent,
+                    packetsSent: report.packetsSent
+                  });
+                }
+              });
             } catch (e) {
               console.warn("⚠️ Could not get stats:", e);
             }
@@ -2978,14 +2949,6 @@ useEffect(() => {
 
   const startVoiceCall = async () => {
     if (!user || !activeConversationUser) return;
-
-    // Test microphone first
-    console.log("📞 Testing microphone before starting call...");
-    const micTest = await testMicrophone();
-    if (!micTest) {
-      toast.error("❌ Microphone non disponible. Vérifiez vos permissions.");
-      return;
-    }
 
     try {
       setCallStatus('calling');
@@ -3013,8 +2976,7 @@ useEffect(() => {
         const audioTracks = localStreamRef.current.getAudioTracks();
         console.log("📤 Before creating offer - Local audio tracks:");
         audioTracks.forEach((track, i) => {
-          console.log(`📤 Track ${i}: enabled=${track.enabled}, readyState=${track.readyState}, muted=${track.muted}, id=${track.id}`);
-          console.log(`📤 Track ${i} settings:`, track.getSettings());
+          console.log(`📤 Track ${i}: enabled=${track.enabled}, readyState=${track.readyState}, muted=${track.muted}`);
         });
       }
 
@@ -3087,8 +3049,7 @@ console.log('📤 Local description set for answer in accept');
     const audioTracks = localStreamRef.current.getAudioTracks();
     console.log("📤 Before sending answer - Local audio tracks:");
     audioTracks.forEach((track, i) => {
-      console.log(`📤 Track ${i}: enabled=${track.enabled}, readyState=${track.readyState}, muted=${track.muted}, id=${track.id}`);
-      console.log(`📤 Track ${i} settings:`, track.getSettings());
+      console.log(`📤 Track ${i}: enabled=${track.enabled}, readyState=${track.readyState}, muted=${track.muted}`);
     });
   }
 
@@ -3123,44 +3084,6 @@ console.log('📤 Local description set for answer in accept');
     } catch {}
     setIncomingCall(null);
     setCallStatus('idle');
-  };
-
-  const cleanupWebRTC = () => {
-    console.log("🧹 Cleaning up WebRTC resources...");
-    
-    // Close peer connection
-    if (pcRef.current) {
-      pcRef.current.close();
-      pcRef.current = null;
-    }
-    
-    // Stop local stream
-    if (localStreamRef.current) {
-      localStreamRef.current.getTracks().forEach(track => track.stop());
-      localStreamRef.current = null;
-    }
-    
-    // Clear remote stream and audio element
-    if (remoteStreamRef.current) {
-      remoteStreamRef.current.getTracks().forEach(track => track.stop());
-      remoteStreamRef.current = null;
-    }
-    
-    if (remoteAudioRef.current) {
-      remoteAudioRef.current.srcObject = null;
-      remoteAudioRef.current = null;
-    }
-    
-    // Clear pending ICE candidates
-    pendingIceRef.current = [];
-    
-    // Reset states
-    setMicrophoneActive(false);
-    setRemoteAudioPlaying(false);
-    setAudioNeedsInteraction(false);
-    setMicrophoneDetected(null);
-    
-    console.log("✅ WebRTC cleanup completed");
   };
 
   const hangupVoiceCall = async () => {
@@ -3934,27 +3857,7 @@ console.log('📤 Local description set for answer in accept');
       {callStatus === 'calling' && 'Appel en cours…'}
       {callStatus === 'ringing' && 'Ça sonne…'}
       {callStatus === 'connecting' && 'Connexion en cours…'}
-      {microphoneDetected !== null && (
-        <div className="mt-1 text-xs font-medium flex items-center space-x-2">
-          <span>🎤 Micro:</span>
-          <span className={`px-2 py-1 rounded text-xs font-bold ${
-            microphoneDetected ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-          }`}>
-            {microphoneDetected ? 'DÉTECTÉ' : 'NON DÉTECTÉ'}
-          </span>
-        </div>
-      )}
-      {callStatus === 'connected' && (
-        <div className="mt-1 text-xs text-green-600 font-medium flex items-center space-x-2">
-          <span>🎧 Audio distant:</span>
-          <span className={`px-2 py-1 rounded text-xs font-bold ${
-            remoteAudioPlaying ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-          }`}>
-            {remoteAudioPlaying ? 'EN COURS' : 'ARRÊTÉ'}
-          </span>
-          {remoteAudioPlaying && <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>}
-        </div>
-      )}
+      {callStatus === 'connected' && 'En appel'}
       {audioNeedsInteraction && (
         <div className="mt-1 text-xs text-orange-600 font-medium">
           🔊 Touchez l&apos;écran pour activer l&apos;audio
@@ -3979,39 +3882,6 @@ console.log('📤 Local description set for answer in accept');
           🔊 Activer audio
         </button>
       )}
-      <button
-        onClick={() => {
-          // Test audio playback
-          if (remoteAudioRef.current && remoteStreamRef.current) {
-            console.log("🧪 Testing audio playback...");
-            remoteAudioRef.current.play().then(() => {
-              console.log("🧪 Test successful - audio is playing");
-            }).catch(e => {
-              console.error("🧪 Test failed:", e);
-            });
-          } else {
-            console.warn("🧪 No remote audio to test");
-          }
-        }}
-        className="px-3 py-1 rounded-lg bg-blue-500 text-white text-sm hover:bg-blue-600"
-        title="Tester la lecture audio"
-      >
-        🧪 Test Audio
-      </button>
-      <button
-        onClick={async () => {
-          const result = await testMicrophone();
-          if (result) {
-            toast.success("🎤 Microphone test réussi !");
-          } else {
-            toast.error("❌ Microphone test échoué");
-          }
-        }}
-        className="px-3 py-1 rounded-lg bg-purple-500 text-white text-sm hover:bg-purple-600"
-        title="Tester le microphone"
-      >
-        🎤 Test Micro
-      </button>
       <button
         onClick={toggleMute}
         className={`px-3 py-1 rounded-lg border text-sm flex items-center space-x-2 ${
