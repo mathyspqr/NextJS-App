@@ -2361,6 +2361,31 @@ useEffect(() => {
     setSendingFriendRequest(true);
 
     try {
+      // Vérifier s'il existe déjà une relation d'ami ou une demande en cours
+      const { data: existingRequests, error: checkError } = await supabase
+        .from('friendships')
+        .select('id, status, requester_id, addressee_id')
+        .or(`and(requester_id.eq.${user.id},addressee_id.eq.${targetUserId}),and(requester_id.eq.${targetUserId},addressee_id.eq.${user.id})`);
+
+      if (checkError) throw checkError;
+
+      // Vérifier s'il y a déjà une demande ou une amitié
+      const existingRequest = existingRequests?.find(req =>
+        (req.status === 'pending' || req.status === 'accepted')
+      );
+
+      if (existingRequest) {
+        if (existingRequest.status === 'accepted') {
+          toast.info('Vous êtes déjà amis !');
+        } else if (existingRequest.requester_id === user.id) {
+          toast.info('Vous avez déjà envoyé une demande à cette personne');
+        } else {
+          toast.info('Cette personne vous a déjà envoyé une demande d\'ami');
+        }
+        return;
+      }
+
+      // Si aucune relation existante, créer la demande
       const { error } = await supabase
         .from('friendships')
         .insert({
