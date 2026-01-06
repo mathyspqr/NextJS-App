@@ -1248,13 +1248,14 @@ pendingIceRef.current = [];
 console.log('📤 Local description set for answer');
 
               console.log('📤 Envoi answer');
-              await supabase.from('webrtc_signals').insert({
-                call_id: activeCall?.id,
-                sender_id: user.id,
-                receiver_id: otherUserId,
-                signal_type: 'answer',
-                signal_data: answer,
-              });
+await supabase.from('webrtc_signals').insert({
+  call_id: currentCall.id, // ✅ au lieu de activeCall?.id
+  sender_id: user.id,
+  receiver_id: otherUserId,
+  signal_type: 'answer',
+  signal_data: answer,
+});
+
             }
 
             if (sig.signal_type === 'answer') {
@@ -3037,7 +3038,15 @@ if (offerErr) {
 if (existingOffer?.signal_data) {
   const pc = pcRef.current!;
   console.log('📥 Remote description set from fetched offer');
-  await pc.setRemoteDescription(existingOffer.signal_data);
+  
+  
+  // ✅ appliquer les ICE bufferisés maintenant que remoteDescription existe
+for (const c of pendingIceRef.current) {
+  try { await pc.addIceCandidate(c); console.log('🧊 ICE buffered ajouté (accept)'); }
+  catch (e) { console.warn("ICE buffered failed (accept)", e); }
+}
+pendingIceRef.current = [];
+
 
   const answer = await pc.createAnswer();
   await pc.setLocalDescription(answer);
