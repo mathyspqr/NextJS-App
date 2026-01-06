@@ -2850,6 +2850,41 @@ useEffect(() => {
           setTimeout(checkAudioLevel, 3000);
           setTimeout(checkAudioLevel, 5000); // Check again after 5 seconds
 
+          // Add WebRTC stats monitoring for audio
+          const monitorStats = async () => {
+            try {
+              const pc = pcRef.current;
+              if (pc && pc.connectionState === 'connected') {
+                const stats = await pc.getStats();
+                let inboundAudioStats = null;
+                stats.forEach(report => {
+                  if (report.type === 'inbound-rtp' && report.kind === 'audio') {
+                    inboundAudioStats = {
+                      bytesReceived: report.bytesReceived,
+                      packetsReceived: report.packetsReceived,
+                      packetsLost: report.packetsLost,
+                      jitter: report.jitter,
+                      totalAudioEnergy: report.totalAudioEnergy,
+                      totalSamplesReceived: report.totalSamplesReceived
+                    };
+                  }
+                });
+                if (inboundAudioStats) {
+                  console.log("📊 Inbound audio stats:", inboundAudioStats);
+                  if (inboundAudioStats.bytesReceived === 0) {
+                    console.warn("⚠️ No audio data received from remote peer!");
+                  } else if (inboundAudioStats.totalSamplesReceived === 0) {
+                    console.warn("⚠️ Audio data received but no samples decoded!");
+                  }
+                }
+              }
+            } catch (e) {
+              console.warn("⚠️ Could not get WebRTC stats:", e);
+            }
+          };
+          setTimeout(monitorStats, 2000);
+          setTimeout(monitorStats, 5000);
+
           // Connect to audio element
           const audioElement = remoteAudioRef.current;
           if (audioElement) {
@@ -2947,21 +2982,33 @@ useEffect(() => {
           setTimeout(async () => {
             try {
               const stats = await pc.getStats();
+              let inboundStats = null;
+              let outboundStats = null;
               stats.forEach(report => {
                 if (report.type === 'inbound-rtp' && report.kind === 'audio') {
-                  console.log("📊 Inbound audio stats:", {
+                  inboundStats = {
                     bytesReceived: report.bytesReceived,
                     packetsReceived: report.packetsReceived,
-                    packetsLost: report.packetsLost
-                  });
+                    packetsLost: report.packetsLost,
+                    jitter: report.jitter
+                  };
                 }
                 if (report.type === 'outbound-rtp' && report.kind === 'audio') {
-                  console.log("📊 Outbound audio stats:", {
+                  outboundStats = {
                     bytesSent: report.bytesSent,
                     packetsSent: report.packetsSent
-                  });
+                  };
                 }
               });
+              
+              console.log("📊 Connection stats - Outbound:", outboundStats, "Inbound:", inboundStats);
+              
+              if (outboundStats && outboundStats.bytesSent === 0) {
+                console.warn("⚠️ No audio data sent! Local microphone may not be working.");
+              }
+              if (inboundStats && inboundStats.bytesReceived === 0) {
+                console.warn("⚠️ No audio data received! Remote microphone may not be working.");
+              }
             } catch (e) {
               console.warn("⚠️ Could not get stats:", e);
             }
