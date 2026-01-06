@@ -2925,9 +2925,10 @@ useEffect(() => {
                 
                 if (inboundAudioStats) {
                   console.log("📊 Inbound audio stats:", inboundAudioStats);
-                  if (inboundAudioStats.bytesReceived === 0) {
+                  const stats = inboundAudioStats as { bytesReceived?: number; totalSamplesReceived?: number };
+                  if (stats.bytesReceived === 0) {
                     console.warn("⚠️ No audio data received from remote peer!");
-                  } else if (inboundAudioStats.totalSamplesReceived === 0) {
+                  } else if (stats.totalSamplesReceived === 0) {
                     console.warn("⚠️ Audio data received but no samples decoded!");
                   }
                 }
@@ -3104,10 +3105,10 @@ useEffect(() => {
               
               console.log("📊 Connection stats - Outbound:", outboundStats, "Inbound:", inboundStats);
               
-              if (outboundStats && outboundStats.bytesSent === 0) {
+              if (outboundStats && (outboundStats as { bytesSent?: number }).bytesSent === 0) {
                 console.warn("⚠️ No audio data sent! Local microphone may not be working.");
               }
-              if (inboundStats && inboundStats.bytesReceived === 0) {
+              if (inboundStats && (inboundStats as { bytesReceived?: number }).bytesReceived === 0) {
                 console.warn("⚠️ No audio data received! Remote microphone may not be working.");
               }
             } catch (e) {
