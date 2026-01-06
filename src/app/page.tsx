@@ -2907,13 +2907,18 @@ useEffect(() => {
                 stats.forEach(report => {
                   if (report.type === 'inbound-rtp' && report.kind === 'audio') {
                     const rtpReport = report as RTCInboundRtpStreamStats;
+                    const extendedReport = report as RTCInboundRtpStreamStats & {
+                      totalAudioEnergy?: number;
+                      totalSamplesReceived?: number;
+                    };
+                    
                     inboundAudioStats = {
                       bytesReceived: rtpReport.bytesReceived,
                       packetsReceived: rtpReport.packetsReceived,
                       packetsLost: rtpReport.packetsLost,
                       jitter: rtpReport.jitter,
-                      totalAudioEnergy: (rtpReport as any).totalAudioEnergy,
-                      totalSamplesReceived: (rtpReport as any).totalSamplesReceived
+                      totalAudioEnergy: extendedReport.totalAudioEnergy,
+                      totalSamplesReceived: extendedReport.totalSamplesReceived
                     };
                   }
                 });
