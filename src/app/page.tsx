@@ -2704,96 +2704,27 @@ useEffect(() => {
   };
 
   const ensurePeerConnection = async (callId: string, otherUserId: string) => {
-    console.log("🔧 Setting up WebRTC peer connection...");
-
     // 1) Get microphone access if not already done
     if (!localStreamRef.current) {
-      console.log("🎤 Requesting microphone access...");
-      
-      // Detect if we're on mobile
-      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-      console.log("📱 Device type:", isMobile ? "Mobile" : "Desktop");
-      
       try {
-        // Simplified audio constraints for better mobile compatibility
         const audioConstraints = {
           audio: {
             echoCancellation: true,
             noiseSuppression: true,
             autoGainControl: true,
-            sampleRate: { ideal: 48000, min: 16000 }, // Allow fallback to lower sample rates
-            channelCount: 1,
-            // Add latency and volume constraints for mobile
-            latency: { ideal: 0.01 },
-            volume: { ideal: 1.0 },
-            // Force specific codecs for better compatibility
-            advanced: [
-              { echoCancellation: true },
-              { noiseSuppression: true },
-              { autoGainControl: true }
-            ]
+            sampleRate: { ideal: 48000, min: 16000 },
+            channelCount: 1
           }
         };
 
-        console.log("🎤 Using audio constraints:", audioConstraints);
         localStreamRef.current = await navigator.mediaDevices.getUserMedia(audioConstraints);
-        
-        // Verify that the local audio track is actually capturing audio
-        const audioTrack = localStreamRef.current.getAudioTracks()[0];
-        if (audioTrack) {
-          console.log("🎙️ Testing local audio track...");
-          
-          // Create a temporary audio context to test the track
-          try {
-            // Handle browser compatibility for AudioContext
-            const AudioContextClass = window.AudioContext || 
-              (window as typeof window & { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-            const audioContext = new AudioContextClass();
-            const analyser = audioContext.createAnalyser();
-            const microphone = audioContext.createMediaStreamSource(localStreamRef.current);
-            microphone.connect(analyser);
-            
-            analyser.fftSize = 256;
-            const bufferLength = analyser.frequencyBinCount;
-            const dataArray = new Uint8Array(bufferLength);
-            
-            // Check audio levels after a short delay
-            setTimeout(() => {
-              analyser.getByteFrequencyData(dataArray);
-              const average = dataArray.reduce((a, b) => a + b) / bufferLength;
-              console.log("🎙️ Local audio level test - average:", average);
-              
-              if (average < 1) {
-                console.warn("⚠️ Local microphone may not be capturing audio properly (low levels)");
-                console.log("🔍 Debug info - track state:", {
-                  enabled: audioTrack.enabled,
-                  muted: audioTrack.muted,
-                  readyState: audioTrack.readyState,
-                  label: audioTrack.label,
-                  id: audioTrack.id
-                });
-              } else {
-                console.log("✅ Local microphone appears to be working");
-              }
-              
-              audioContext.close();
-            }, 1000);
-            
-          } catch (e) {
-            console.warn("⚠️ Could not test audio levels:", e);
-          }
-        }
       } catch (error) {
-        console.error("❌ Microphone access denied:", error);
         throw new Error("Microphone access required for voice calls");
       }
     }
 
     // 2) Create peer connection if needed
     if (!pcRef.current) {
-      console.log("🧩 Creating RTCPeerConnection...");
-      
-      // ICE servers with STUN + TURN for cross-network connectivity
       const iceServers = [
         { urls: "stun:stun.l.google.com:19302" },
         { urls: "stun:stun1.l.google.com:19302" },
@@ -2813,228 +2744,34 @@ useEffect(() => {
         iceCandidatePoolSize: 10
       });
 
-      // Store reference
       pcRef.current = pc;
 
       // 3) Add local audio track to peer connection
       const localAudioTrack = localStreamRef.current.getAudioTracks()[0];
       if (localAudioTrack) {
-        console.log("🎙️ Adding local audio track to peer connection");
-        console.log("🎙️ Local track enabled:", localAudioTrack.enabled, "readyState:", localAudioTrack.readyState, "muted:", localAudioTrack.muted);
-        console.log("🎙️ Local track settings:", localAudioTrack.getSettings());
-        console.log("🎙️ Local track constraints:", localAudioTrack.getConstraints());
-
-        // Add event listeners to local track
-        localAudioTrack.onmute = () => console.log("🎙️ Local audio track muted");
-        localAudioTrack.onunmute = () => console.log("🎙️ Local audio track unmuted");
-        localAudioTrack.onended = () => console.log("🎙️ Local audio track ended");
-
-        // Add the track directly - let WebRTC create transceivers automatically
         pc.addTrack(localAudioTrack, localStreamRef.current);
-        console.log("🎙️ Local audio track added successfully");
-        
-        // Vérifier les transceivers après ajout
-        const transceivers = pc.getTransceivers();
-        console.log("🎙️ Total transceivers after adding track:", transceivers.length);
-        transceivers.forEach((t, i) => {
-          console.log(`🎙️ Transceiver ${i}: direction=${t.direction}, mid=${t.mid}`);
-          if (t.sender && t.sender.track) {
-            console.log(`🎙️ Transceiver ${i} sender track: ${t.sender.track.kind}, enabled=${t.sender.track.enabled}`);
-          }
-        });
-      } else {
-        console.warn("⚠️ No local audio track found");
       }
 
       // 4) Handle remote tracks
       pc.ontrack = (event) => {
-        console.log("🎧 Remote track received:", event.track.kind, "from", event.streams.length, "streams");
-        console.log("🎧 Remote track enabled:", event.track.enabled, "readyState:", event.track.readyState, "muted:", event.track.muted);
-        console.log("🎧 Remote track settings:", event.track.getSettings());
-        
-        // Vérifier les transceivers pour les tracks distants
-        const transceivers = pc.getTransceivers();
-        transceivers.forEach((t, i) => {
-          if (t.receiver && t.receiver.track) {
-            console.log(`🎧 Transceiver ${i} receiver track: ${t.receiver.track.kind}, enabled=${t.receiver.track.enabled}, readyState=${t.receiver.track.readyState}`);
-          }
-        });
-
         if (event.track.kind === 'audio') {
-          console.log("🎧 Remote track received - creating dedicated audio stream");
-
-          // Force unmute the remote track if it's muted
-          if (event.track.muted) {
-            console.log("🎧 Remote track is muted, attempting to unmute...");
-            // Note: we can't actually unmute a remote track, but we can check if it becomes unmuted
-          }
-
-          // Always create a new MediaStream with just this audio track
           remoteStreamRef.current = new MediaStream([event.track]);
-          console.log("🎧 Created new MediaStream with remote audio track, tracks:", remoteStreamRef.current.getTracks().length);
 
-          // Add event listeners to the remote track for debugging
-          event.track.onmute = () => {
-            console.log("🎧 Remote audio track muted");
-            // Essayer de forcer le play si l'audio était en cours
-            const audioElement = remoteAudioRef.current;
-            if (audioElement && audioElement.paused) {
-              audioElement.play().catch(e => console.warn("Could not resume on mute:", e));
-            }
-          };
-          event.track.onunmute = () => {
-            console.log("🎧 Remote audio track unmuted - audio should now be heard!");
-            // Forcer le play de l'audio element quand le track se unmute
-            const audioElement = remoteAudioRef.current;
-            if (audioElement) {
-              audioElement.play().then(() => {
-                console.log("🎧 Audio element restarted after track unmute");
-              }).catch(e => console.warn("Could not play on unmute:", e));
-            }
-          };
-          event.track.onended = () => console.log("🎧 Remote audio track ended");
-
-          // Check if track has audio data periodically
-          const checkAudioLevel = () => {
-            if (remoteAudioRef.current && !remoteAudioRef.current.paused) {
-              console.log("🎧 Audio element status - playing:", !remoteAudioRef.current.paused, "volume:", remoteAudioRef.current.volume, "muted:", remoteAudioRef.current.muted);
-            }
-            // Also check remote track status
-            if (event.track) {
-              console.log("🎧 Remote track status check - enabled:", event.track.enabled, "readyState:", event.track.readyState, "muted:", event.track.muted);
-            }
-          };
-          setTimeout(checkAudioLevel, 1000);
-          setTimeout(checkAudioLevel, 3000);
-          setTimeout(checkAudioLevel, 5000); // Check again after 5 seconds
-
-          // Add WebRTC stats monitoring for audio
-          const monitorStats = async () => {
-            try {
-              const pc = pcRef.current;
-              if (pc && pc.connectionState === 'connected') {
-                const stats = await pc.getStats();
-                let inboundAudioStats: {
-                  bytesReceived?: number;
-                  packetsReceived?: number;
-                  packetsLost?: number;
-                  jitter?: number;
-                  totalAudioEnergy?: number;
-                  totalSamplesReceived?: number;
-                } | null = null;
-                
-                stats.forEach(report => {
-                  if (report.type === 'inbound-rtp' && report.kind === 'audio') {
-                    const rtpReport = report as RTCInboundRtpStreamStats;
-                    const extendedReport = report as RTCInboundRtpStreamStats & {
-                      totalAudioEnergy?: number;
-                      totalSamplesReceived?: number;
-                    };
-                    
-                    inboundAudioStats = {
-                      bytesReceived: rtpReport.bytesReceived,
-                      packetsReceived: rtpReport.packetsReceived,
-                      packetsLost: rtpReport.packetsLost,
-                      jitter: rtpReport.jitter,
-                      totalAudioEnergy: extendedReport.totalAudioEnergy,
-                      totalSamplesReceived: extendedReport.totalSamplesReceived
-                    };
-                  }
-                });
-                
-                if (inboundAudioStats) {
-                  console.log("📊 Inbound audio stats:", inboundAudioStats);
-                  const stats = inboundAudioStats as { bytesReceived?: number; totalSamplesReceived?: number };
-                  if (stats.bytesReceived === 0) {
-                    console.warn("⚠️ No audio data received from remote peer!");
-                  } else if (stats.totalSamplesReceived === 0) {
-                    console.warn("⚠️ Audio data received but no samples decoded!");
-                  }
-                }
-              }
-            } catch (e) {
-              console.warn("⚠️ Could not get WebRTC stats:", e);
-            }
-          };
-          setTimeout(monitorStats, 2000);
-          setTimeout(monitorStats, 5000);
-
-          // Connect to audio element
           const audioElement = remoteAudioRef.current;
           if (audioElement) {
-            // Clear any previous srcObject
-            audioElement.srcObject = null;
-            // Set the new stream
             audioElement.srcObject = remoteStreamRef.current;
             audioElement.volume = 1.0;
             audioElement.muted = false;
-            console.log("🎧 Audio element configured - volume:", audioElement.volume, "muted:", audioElement.muted);
 
-            // Test remote audio levels
-            try {
-              // Handle browser compatibility for AudioContext
-              const AudioContextClass = window.AudioContext || 
-                (window as typeof window & { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-              const audioContext = new AudioContextClass();
-              const analyser = audioContext.createAnalyser();
-              const remoteSource = audioContext.createMediaStreamSource(remoteStreamRef.current);
-              remoteSource.connect(analyser);
-              
-              analyser.fftSize = 256;
-              const bufferLength = analyser.frequencyBinCount;
-              const dataArray = new Uint8Array(bufferLength);
-              
-              const checkRemoteLevels = () => {
-                analyser.getByteFrequencyData(dataArray);
-                const average = dataArray.reduce((a, b) => a + b) / bufferLength;
-                console.log("🎧 Remote audio level check - average:", average);
-                
-                if (average < 1) {
-                  console.warn("⚠️ Remote audio levels are very low or silent!");
-                } else {
-                  console.log("✅ Remote audio detected with levels:", average);
-                }
-              };
-              
-              setTimeout(checkRemoteLevels, 2000);
-              setTimeout(checkRemoteLevels, 4000);
-              
-              // Clean up after testing
-              setTimeout(() => audioContext.close(), 6000);
-              
-            } catch (e) {
-              console.warn("⚠️ Could not set up remote audio level monitoring:", e);
-            }
-
-            // Add event listeners for debugging
-            audioElement.onplaying = () => console.log("🎧 Audio element started playing");
-            audioElement.onpause = () => console.log("🎧 Audio element paused");
-            audioElement.onended = () => console.log("🎧 Audio element ended");
-            audioElement.onerror = (e) => console.error("🎧 Audio element error:", e);
-            audioElement.onwaiting = () => console.log("🎧 Audio element waiting for data");
-            audioElement.oncanplay = () => console.log("🎧 Audio element can play");
-            audioElement.oncanplaythrough = () => console.log("🎧 Audio element can play through");
-
-            // Force play with error handling for mobile
             const playPromise = audioElement.play();
             if (playPromise !== undefined) {
               playPromise.then(() => {
-                console.log("🎧 Audio playback started successfully");
-                console.log("🎧 Audio element playing:", !audioElement.paused, "currentTime:", audioElement.currentTime);
                 setAudioNeedsInteraction(false);
-              }).catch(e => {
-                console.warn("🔇 Auto-play blocked (likely mobile):", e);
-                console.log("🔇 Attempting to play on user interaction...");
+              }).catch(() => {
                 setAudioNeedsInteraction(true);
                 
-                // On mobile, we might need user interaction to start audio
                 const resumeAudio = () => {
-                  audioElement.play().then(() => {
-                    console.log("🎧 Audio resumed after user interaction");
-                    setAudioNeedsInteraction(false);
-                  }).catch(e2 => {
-                    console.error("❌ Still can't play audio:", e2);
-                  });
+                  audioElement.play().catch(() => {});
                   document.removeEventListener('touchstart', resumeAudio);
                   document.removeEventListener('click', resumeAudio);
                 };
@@ -3043,10 +2780,6 @@ useEffect(() => {
                 document.addEventListener('click', resumeAudio, { once: true });
               });
             }
-
-            console.log("🎧 Remote audio connected to audio element");
-          } else {
-            console.warn("⚠️ Remote audio element not found");
           }
         }
       };
@@ -3054,7 +2787,6 @@ useEffect(() => {
       // 5) Handle ICE candidates
       pc.onicecandidate = async (event) => {
         if (event.candidate && user) {
-          console.log("🧊 Sending ICE candidate");
           try {
             await supabase.from('webrtc_signals').insert({
               call_id: callId,
@@ -3064,84 +2796,18 @@ useEffect(() => {
               signal_data: event.candidate
             });
           } catch (error) {
-            console.error("❌ Failed to send ICE candidate:", error);
+            console.error("Failed to send ICE candidate:", error);
           }
         }
       };
 
       // 6) Monitor connection state
       pc.onconnectionstatechange = () => {
-        console.log("🧩 Connection state:", pc.connectionState);
         if (pc.connectionState === 'connected') {
-          console.log("✅ WebRTC fully connected!");
-          
-          // Vérifier l'état de tous les transceivers une fois connecté
-          const transceivers = pc.getTransceivers();
-          console.log("✅ Connected - Transceivers status:");
-          transceivers.forEach((t, i) => {
-            console.log(`✅ Transceiver ${i}: direction=${t.direction}, currentDirection=${t.currentDirection}`);
-            if (t.sender && t.sender.track) {
-              console.log(`✅ Sender track ${i}: ${t.sender.track.kind}, enabled=${t.sender.track.enabled}, readyState=${t.sender.track.readyState}`);
-            }
-            if (t.receiver && t.receiver.track) {
-              console.log(`✅ Receiver track ${i}: ${t.receiver.track.kind}, enabled=${t.receiver.track.enabled}, readyState=${t.receiver.track.readyState}`);
-            }
-          });
-          
-          // Vérifier les statistiques de la connexion
-          setTimeout(async () => {
-            try {
-              const stats = await pc.getStats();
-              let inboundStats: {
-                bytesReceived?: number;
-                packetsReceived?: number;
-                packetsLost?: number;
-                jitter?: number;
-              } | null = null;
-              let outboundStats: {
-                bytesSent?: number;
-                packetsSent?: number;
-              } | null = null;
-              
-              stats.forEach(report => {
-                if (report.type === 'inbound-rtp' && report.kind === 'audio') {
-                  const rtpReport = report as RTCInboundRtpStreamStats;
-                  inboundStats = {
-                    bytesReceived: rtpReport.bytesReceived,
-                    packetsReceived: rtpReport.packetsReceived,
-                    packetsLost: rtpReport.packetsLost,
-                    jitter: rtpReport.jitter
-                  };
-                }
-                if (report.type === 'outbound-rtp' && report.kind === 'audio') {
-                  const rtpReport = report as RTCOutboundRtpStreamStats;
-                  outboundStats = {
-                    bytesSent: rtpReport.bytesSent,
-                    packetsSent: rtpReport.packetsSent
-                  };
-                }
-              });
-              
-              console.log("📊 Connection stats - Outbound:", outboundStats, "Inbound:", inboundStats);
-              
-              if (outboundStats && (outboundStats as { bytesSent?: number }).bytesSent === 0) {
-                console.warn("⚠️ No audio data sent! Local microphone may not be working.");
-              }
-              if (inboundStats && (inboundStats as { bytesReceived?: number }).bytesReceived === 0) {
-                console.warn("⚠️ No audio data received! Remote microphone may not be working.");
-              }
-            } catch (e) {
-              console.warn("⚠️ Could not get stats:", e);
-            }
-          }, 2000);
+          // Connection established successfully
         } else if (pc.connectionState === 'failed') {
-          console.error("❌ WebRTC connection failed");
           cleanupWebRTC();
         }
-      };
-
-      pc.oniceconnectionstatechange = () => {
-        console.log("🧊 ICE connection state:", pc.iceConnectionState);
       };
 
       console.log("🧩 Peer connection setup complete");
@@ -3154,7 +2820,7 @@ useEffect(() => {
     try {
       setCallStatus('calling');
 
-      // 1) create call row
+      // 1) Create call record
       const { data: call, error: callError } = await supabase
         .from('voice_calls')
         .insert({
@@ -3166,47 +2832,15 @@ useEffect(() => {
         .single();
 
       if (callError) throw callError;
-
       setActiveCall(call);
 
-      // 2) setup WebRTC and send offer
+      // 2) Setup WebRTC
       await ensurePeerConnection(call.id, activeConversationUser.id);
 
-      // Attendre que le track local soit prêt avant de créer l'offer
-      if (!localStreamRef.current || localStreamRef.current.getAudioTracks().length === 0) {
-        throw new Error("Microphone access failed - no audio track available");
-      }
-
-      const localAudioTrack = localStreamRef.current.getAudioTracks()[0];
-      if (!localAudioTrack || localAudioTrack.readyState !== 'live') {
-        throw new Error("Local audio track not ready");
-      }
-
-      console.log("🎙️ Local audio track ready:", localAudioTrack.enabled, localAudioTrack.readyState);
-
-      // Attendre un peu pour s'assurer que le track est stable (surtout important sur mobile)
-      await new Promise(resolve => setTimeout(resolve, 500));
-
-      // Vérifier à nouveau après le délai
-      if (localAudioTrack.readyState !== 'live' || localAudioTrack.muted) {
-        console.warn("⚠️ Local audio track became muted after delay, but proceeding anyway");
-      }
-
-      console.log("🎙️ Proceeding with offer creation after stability check");
-
-      // Vérifier l'état des tracks locaux avant de créer l'offre
-      if (localStreamRef.current) {
-        const audioTracks = localStreamRef.current.getAudioTracks();
-        console.log("📤 Before creating offer - Local audio tracks:");
-        audioTracks.forEach((track, i) => {
-          console.log(`📤 Track ${i}: enabled=${track.enabled}, readyState=${track.readyState}, muted=${track.muted}`);
-        });
-      }
-
+      // 3) Create and send offer
       const pc = pcRef.current!;
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
-      console.log('📤 Offer created and set as local description');
 
       await supabase.from('webrtc_signals').insert({
         call_id: call.id,
@@ -3216,9 +2850,9 @@ useEffect(() => {
         signal_data: offer,
       });
 
-      console.log('📤 Offer sent to database');
+      console.log('📞 Call initiated');
     } catch (e) {
-      console.error(e);
+      console.error('❌ Failed to start call:', e);
       toast.error("Impossible de démarrer l'appel");
       setCallStatus('idle');
       setActiveCall(null);
@@ -3234,64 +2868,45 @@ useEffect(() => {
       setActiveCall(call);
       setIncomingCall(null);
 
-      // 1) mark connected
+      // 1) Update call status
       await supabase.from('voice_calls')
         .update({ status: 'connected', started_at: new Date().toISOString() })
         .eq('id', call.id);
 
-      // 2) prepare PC
-      const otherUserId = call.caller_id; // l’autre c’est le caller
+      // 2) Setup WebRTC
+      const otherUserId = call.caller_id;
       await ensurePeerConnection(call.id, otherUserId);
 
-      // ✅ IMPORTANT: si l'offer a été envoyé AVANT qu'on accepte,
-// on doit le récupérer en BDD sinon on le "rate" et il n'y aura jamais de son.
-const { data: existingOffer, error: offerErr } = await supabase
-  .from('webrtc_signals')
-  .select('*')
-  .eq('call_id', call.id)
-  .eq('signal_type', 'offer')
-  .order('created_at', { ascending: false })
-  .limit(1)
-  .maybeSingle();
+      // 3) Get offer and create answer
+      const { data: existingOffer } = await supabase
+        .from('webrtc_signals')
+        .select('*')
+        .eq('call_id', call.id)
+        .eq('signal_type', 'offer')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
-if (offerErr) {
-  console.warn('⚠️ Erreur fetch offer:', offerErr);
-}
+      if (existingOffer?.signal_data) {
+        const pc = pcRef.current!;
+        await pc.setRemoteDescription(existingOffer.signal_data);
 
-if (existingOffer?.signal_data) {
-  const pc = pcRef.current!;
-  console.log('📥 Remote description set from fetched offer');
-  await pc.setRemoteDescription(existingOffer.signal_data);
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
 
-  const answer = await pc.createAnswer();
-  await pc.setLocalDescription(answer);
-console.log('📤 Local description set for answer in accept');
+        await supabase.from('webrtc_signals').insert({
+          call_id: call.id,
+          sender_id: user.id,
+          receiver_id: otherUserId,
+          signal_type: 'answer',
+          signal_data: answer,
+        });
 
-  // Vérifier l'état des tracks locaux avant d'envoyer l'answer
-  if (localStreamRef.current) {
-    const audioTracks = localStreamRef.current.getAudioTracks();
-    console.log("📤 Before sending answer - Local audio tracks:");
-    audioTracks.forEach((track, i) => {
-      console.log(`📤 Track ${i}: enabled=${track.enabled}, readyState=${track.readyState}, muted=${track.muted}`);
-    });
-  }
-
-  console.log('📤 Envoi answer depuis accept');
-  await supabase.from('webrtc_signals').insert({
-    call_id: call.id,
-    sender_id: user.id,
-    receiver_id: otherUserId,
-    signal_type: 'answer',
-    signal_data: answer,
-  });
-
-  // ✅ Marquer l'appel comme connecté côté UI
-  setCallStatus('connected');
-}
-
-
+        setCallStatus('connected');
+        console.log('📞 Call accepted');
+      }
     } catch (e) {
-      console.error(e);
+      console.error('❌ Failed to accept call:', e);
       toast.error("Erreur lors de l'acceptation");
       setCallStatus('idle');
       setActiveCall(null);
@@ -5044,3 +4659,5 @@ console.log('📤 Local description set for answer in accept');
 };
 
 export default Page;
+
+
