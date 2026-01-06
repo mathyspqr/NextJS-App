@@ -2906,6 +2906,7 @@ useEffect(() => {
                 document.addEventListener('click', resumeAudio, { once: true });
               });
             }
+            }
 
             console.log("🎧 Remote audio connected to audio element");
           } else {
