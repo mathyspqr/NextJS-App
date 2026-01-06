@@ -2735,33 +2735,20 @@ useEffect(() => {
     if (!pcRef.current) {
       console.log("🧩 Creating RTCPeerConnection...");
       
-      // Get ICE servers from environment or fallback to STUN only
-      let iceServers;
-      try {
-        const iceServersEnv = process.env.NEXT_PUBLIC_ICE_SERVERS;
-        if (iceServersEnv) {
-          iceServers = JSON.parse(iceServersEnv);
-          console.log("🧊 Using ICE servers from environment:", iceServers);
-        } else {
-          console.warn("⚠️ No NEXT_PUBLIC_ICE_SERVERS found, using STUN only. TURN recommended for production!");
-          iceServers = [
-            { urls: "stun:stun.l.google.com:19302" },
-            { urls: "stun:stun1.l.google.com:19302" },
-            { urls: "stun:stun2.l.google.com:19302" },
-            { urls: "stun:stun3.l.google.com:19302" },
-            { urls: "stun:stun4.l.google.com:19302" },
-          ];
+      // ICE servers with STUN + TURN for cross-network connectivity
+      const iceServers = [
+        { urls: "stun:stun.l.google.com:19302" },
+        { urls: "stun:stun1.l.google.com:19302" },
+        { urls: "stun:stun2.l.google.com:19302" },
+        { urls: "stun:stun3.l.google.com:19302" },
+        { urls: "stun:stun4.l.google.com:19302" },
+        // TURN server for cross-network connectivity
+        { 
+          urls: "turn:openrelay.metered.ca:80",
+          username: "openrelayproject",
+          credential: "openrelayproject"
         }
-      } catch (e) {
-        console.error("❌ Error parsing NEXT_PUBLIC_ICE_SERVERS:", e);
-        iceServers = [
-          { urls: "stun:stun.l.google.com:19302" },
-          { urls: "stun:stun1.l.google.com:19302" },
-          { urls: "stun:stun2.l.google.com:19302" },
-          { urls: "stun:stun3.l.google.com:19302" },
-          { urls: "stun:stun4.l.google.com:19302" },
-        ];
-      }
+      ];
       
       const pc = new RTCPeerConnection({
         iceServers: iceServers,
@@ -2774,7 +2761,7 @@ useEffect(() => {
       // 3) Add local audio track to peer connection
       const localAudioTrack = localStreamRef.current.getAudioTracks()[0];
       if (localAudioTrack) {
-        console.log("🎙️ Adding local audio transceiver to peer connection");
+        console.log("🎙️ Adding local audio track to peer connection");
         console.log("🎙️ Local track enabled:", localAudioTrack.enabled, "readyState:", localAudioTrack.readyState, "muted:", localAudioTrack.muted);
         console.log("🎙️ Local track settings:", localAudioTrack.getSettings());
         console.log("🎙️ Local track constraints:", localAudioTrack.getConstraints());
@@ -2784,16 +2771,13 @@ useEffect(() => {
         localAudioTrack.onunmute = () => console.log("🎙️ Local audio track unmuted");
         localAudioTrack.onended = () => console.log("🎙️ Local audio track ended");
 
-        pc.addTransceiver(localAudioTrack, { direction: 'sendonly' });
-        console.log("🎙️ Transceiver added successfully");
-        
-        // Add transceiver for receiving audio
-        pc.addTransceiver('audio', { direction: 'recvonly' });
-        console.log("🎧 Audio receive transceiver added");
+        // Add the track directly - let WebRTC create transceivers automatically
+        pc.addTrack(localAudioTrack, localStreamRef.current);
+        console.log("🎙️ Local audio track added successfully");
         
         // Vérifier les transceivers après ajout
         const transceivers = pc.getTransceivers();
-        console.log("🎙️ Total transceivers:", transceivers.length);
+        console.log("🎙️ Total transceivers after adding track:", transceivers.length);
         transceivers.forEach((t, i) => {
           console.log(`🎙️ Transceiver ${i}: direction=${t.direction}, mid=${t.mid}`);
           if (t.sender && t.sender.track) {
@@ -2821,13 +2805,26 @@ useEffect(() => {
         if (event.track.kind === 'audio') {
           console.log("🎧 Remote track received - creating dedicated audio stream");
 
+          // Force unmute the remote track if it's muted
+          if (event.track.muted) {
+            console.log("🎧 Remote track is muted, attempting to unmute...");
+            // Note: we can't actually unmute a remote track, but we can check if it becomes unmuted
+          }
+
           // Always create a new MediaStream with just this audio track
           remoteStreamRef.current = new MediaStream([event.track]);
           console.log("🎧 Created new MediaStream with remote audio track, tracks:", remoteStreamRef.current.getTracks().length);
 
           // Add event listeners to the remote track for debugging
           event.track.onmute = () => console.log("🎧 Remote audio track muted");
-          event.track.onunmute = () => console.log("🎧 Remote audio track unmuted");
+          event.track.onunmute = () => {
+            console.log("🎧 Remote audio track unmuted - audio should now be heard!");
+            // Force play the audio element when track becomes unmuted
+            const audioElement = remoteAudioRef.current;
+            if (audioElement && audioElement.paused) {
+              audioElement.play().catch(e => console.warn("Could not auto-play on unmute:", e));
+            }
+          };
           event.track.onended = () => console.log("🎧 Remote audio track ended");
 
           // Check if track has audio data periodically
