@@ -2715,31 +2715,21 @@ useEffect(() => {
       console.log("📱 Device type:", isMobile ? "Mobile" : "Desktop");
       
       try {
-        // Try with basic constraints first, especially for mobile
-        const basicConstraints = {
+        localStreamRef.current = await navigator.mediaDevices.getUserMedia({
           audio: {
             echoCancellation: true,
             noiseSuppression: true,
-            autoGainControl: true
+            autoGainControl: true,
+            sampleRate: isMobile ? 16000 : 44100, // Lower sample rate for mobile
+            channelCount: 1,
+            // Additional constraints for mobile
+            ...(isMobile && {
+              latency: 0.01,
+              volume: 1.0
+            })
           }
-        };
-        
-        // For mobile, try even simpler constraints if basic fails
-        const mobileConstraints = { audio: true };
-        
-        try {
-          localStreamRef.current = await navigator.mediaDevices.getUserMedia(basicConstraints);
-          console.log("🎤 Microphone access granted with basic constraints");
-        } catch (basicError) {
-          console.warn("⚠️ Basic constraints failed, trying minimal constraints for mobile:", basicError);
-          try {
-            localStreamRef.current = await navigator.mediaDevices.getUserMedia(mobileConstraints);
-            console.log("🎤 Microphone access granted with minimal constraints");
-          } catch (minimalError) {
-            console.error("❌ Minimal constraints also failed:", minimalError);
-            throw minimalError;
-          }
-        }
+        });
+        console.log("🎤 Microphone access granted");
       } catch (error) {
         console.error("❌ Microphone access denied:", error);
         throw new Error("Microphone access required for voice calls");
@@ -2776,7 +2766,7 @@ useEffect(() => {
         localAudioTrack.onunmute = () => console.log("🎙️ Local audio track unmuted");
         localAudioTrack.onended = () => console.log("🎙️ Local audio track ended");
 
-        pc.addTransceiver(localAudioTrack, { direction: 'sendonly' });
+        pc.addTransceiver(localAudioTrack, { direction: 'sendrecv' });
         console.log("🎙️ Transceiver added successfully");
         
         // Vérifier les transceivers après ajout
