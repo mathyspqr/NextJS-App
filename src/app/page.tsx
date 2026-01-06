@@ -2715,16 +2715,28 @@ useEffect(() => {
       console.log("📱 Device type:", isMobile ? "Mobile" : "Desktop");
       
       try {
-        localStreamRef.current = await navigator.mediaDevices.getUserMedia({
+        // Simplified audio constraints for better mobile compatibility
+        const audioConstraints = {
           audio: {
             echoCancellation: true,
             noiseSuppression: true,
             autoGainControl: true,
-            sampleRate: 48000, // Standard WebRTC sample rate for compatibility
-            channelCount: 1
+            sampleRate: { ideal: 48000, min: 16000 }, // Allow fallback to lower sample rates
+            channelCount: 1,
+            // Add latency and volume constraints for mobile
+            latency: { ideal: 0.01 },
+            volume: { ideal: 1.0 },
+            // Force specific codecs for better compatibility
+            advanced: [
+              { echoCancellation: true },
+              { noiseSuppression: true },
+              { autoGainControl: true }
+            ]
           }
-        });
-        console.log("🎤 Microphone access granted");
+        };
+
+        console.log("🎤 Using audio constraints:", audioConstraints);
+        localStreamRef.current = await navigator.mediaDevices.getUserMedia(audioConstraints);
         
         // Verify that the local audio track is actually capturing audio
         const audioTrack = localStreamRef.current.getAudioTracks()[0];
@@ -2800,6 +2812,29 @@ useEffect(() => {
         iceServers: iceServers,
         iceCandidatePoolSize: 10
       });
+
+      // Set codec preferences for better mobile compatibility
+      pc.onnegotiationneeded = async () => {
+        try {
+          const offer = await pc.createOffer();
+          
+          // Prefer Opus codec for better mobile compatibility
+          const modifiedOffer = new RTCSessionDescription({
+            type: offer.type,
+            sdp: offer.sdp?.replace(
+              'm=audio 9 UDP/TLS/RTP/SAVPF',
+              'm=audio 9 UDP/TLS/RTP/SAVPF 111 103 104 9 102 0 8 106 105 13 110 112 113 126'
+            )
+          });
+          
+          await pc.setLocalDescription(modifiedOffer);
+          console.log('📤 Modified offer with codec preferences sent');
+        } catch (e) {
+          console.warn('⚠️ Could not modify offer with codec preferences:', e);
+          // Fallback to original offer
+          await pc.setLocalDescription(offer);
+        }
+      };
 
       // Store reference
       pcRef.current = pc;
