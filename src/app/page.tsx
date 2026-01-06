@@ -2979,8 +2979,6 @@ useEffect(() => {
       // 2) setup WebRTC and send offer
       await ensurePeerConnection(call.id, activeConversationUser.id);
 
-      const pc = pcRef.current!;
-
       // Vérifier l'état des tracks locaux avant de créer l'offre
       if (localStreamRef.current) {
         const audioTracks = localStreamRef.current.getAudioTracks();
@@ -2990,13 +2988,14 @@ useEffect(() => {
         });
         
         // Vérifier les transceivers
-        const transceivers = pc.getTransceivers();
+        const transceivers = pcRef.current!.getTransceivers();
         console.log("📤 Before offer - Transceivers:");
         transceivers.forEach((t, i) => {
           console.log(`📤 Transceiver ${i}: direction=${t.direction}, currentDirection=${t.currentDirection}`);
         });
       }
 
+      const pc = pcRef.current!;
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
       console.log('📤 Offer created and set as local description');
@@ -3069,14 +3068,11 @@ console.log('📤 Local description set for answer in accept');
     });
     
     // Vérifier les transceivers
-    const pc = pcRef.current;
-    if (pc) {
-      const transceivers = pc.getTransceivers();
-      console.log("📤 Before answer - Transceivers:");
-      transceivers.forEach((t, i) => {
-        console.log(`📤 Transceiver ${i}: direction=${t.direction}, currentDirection=${t.currentDirection}`);
-      });
-    }
+    const transceivers = pc.getTransceivers();
+    console.log("📤 Before answer - Transceivers:");
+    transceivers.forEach((t, i) => {
+      console.log(`📤 Transceiver ${i}: direction=${t.direction}, currentDirection=${t.currentDirection}`);
+    });
   }
 
   console.log('📤 Envoi answer depuis accept');
