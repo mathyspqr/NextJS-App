@@ -2718,7 +2718,7 @@ useEffect(() => {
         };
 
         localStreamRef.current = await navigator.mediaDevices.getUserMedia(audioConstraints);
-      } catch (error) {
+      } catch {
         throw new Error("Microphone access required for voice calls");
       }
     }
