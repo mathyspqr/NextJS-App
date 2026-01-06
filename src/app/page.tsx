@@ -2720,13 +2720,8 @@ useEffect(() => {
             echoCancellation: true,
             noiseSuppression: true,
             autoGainControl: true,
-            sampleRate: isMobile ? 16000 : 44100, // Lower sample rate for mobile
-            channelCount: 1,
-            // Additional constraints for mobile
-            ...(isMobile && {
-              latency: 0.01,
-              volume: 1.0
-            })
+            sampleRate: 48000, // Standard WebRTC sample rate for compatibility
+            channelCount: 1
           }
         });
         console.log("🎤 Microphone access granted");
@@ -2768,6 +2763,10 @@ useEffect(() => {
 
         pc.addTransceiver(localAudioTrack, { direction: 'sendonly' });
         console.log("🎙️ Transceiver added successfully");
+        
+        // Add transceiver for receiving audio
+        pc.addTransceiver('audio', { direction: 'recvonly' });
+        console.log("🎧 Audio receive transceiver added");
         
         // Vérifier les transceivers après ajout
         const transceivers = pc.getTransceivers();
