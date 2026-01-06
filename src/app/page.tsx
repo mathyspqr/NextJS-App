@@ -2733,7 +2733,10 @@ useEffect(() => {
           
           // Create a temporary audio context to test the track
           try {
-            const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+            // Handle browser compatibility for AudioContext
+            const AudioContextClass = window.AudioContext || 
+              (window as typeof window & { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+            const audioContext = new AudioContextClass();
             const analyser = audioContext.createAnalyser();
             const microphone = audioContext.createMediaStreamSource(localStreamRef.current);
             microphone.connect(analyser);
@@ -2934,7 +2937,10 @@ useEffect(() => {
 
             // Test remote audio levels
             try {
-              const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+              // Handle browser compatibility for AudioContext
+              const AudioContextClass = window.AudioContext || 
+                (window as typeof window & { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+              const audioContext = new AudioContextClass();
               const analyser = audioContext.createAnalyser();
               const remoteSource = audioContext.createMediaStreamSource(remoteStreamRef.current);
               remoteSource.connect(analyser);
