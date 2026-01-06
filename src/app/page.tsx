@@ -2487,11 +2487,7 @@ useEffect(() => {
 
       // Notifier l'autre utilisateur via un broadcast pour qu'il recharge ses conversations
       try {
-        supabase.channel('private-activity').send({
-          type: 'broadcast',
-          event: 'friend_removed',
-          payload: { from: user.id, to: friendId }
-        });
+        supabase.channel('private-activity').send({ type: 'friend_removed', payload: { from: user.id, to: friendId } });
       } catch (err) {
         // Ne pas bloquer l'opération si le broadcast échoue
         console.error('Erreur broadcast friend_removed:', err);
