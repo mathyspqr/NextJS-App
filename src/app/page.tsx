@@ -2462,7 +2462,31 @@ useEffect(() => {
 
       if (error) throw error;
 
-      toast.success('Ami supprimé');
+      // Supprimer tous les messages privés entre les deux utilisateurs
+      const { error: messagesError } = await supabase
+        .from('private_messages')
+        .delete()
+        .or(`and(sender_id.eq.${user.id},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${user.id})`);
+
+      if (messagesError) {
+        console.error('Erreur lors de la suppression des messages:', messagesError);
+        // Ne pas échouer complètement si la suppression des messages échoue
+      }
+
+      // Supprimer la conversation de la liste visible
+      setConversations(prev => prev.filter(c => c.odId !== friendId));
+
+      // Si la conversation supprimée est celle actuellement ouverte, la fermer
+      if (activeConversation === friendId) {
+        setActiveConversation(null);
+        setActiveConversationUser(null);
+        setPrivateMessages([]);
+        setNewPrivateMessage('');
+        setPrivateImagePreview(null);
+        setPrivateImageFile(null);
+      }
+
+      toast.success('Ami et conversation supprimés');
       setFriends(prev => prev.filter(f => f.id !== friendId));
       
       if (viewingProfile?.id === friendId) {
