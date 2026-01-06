@@ -2816,13 +2816,22 @@ useEffect(() => {
           console.log("🎧 Created new MediaStream with remote audio track, tracks:", remoteStreamRef.current.getTracks().length);
 
           // Add event listeners to the remote track for debugging
-          event.track.onmute = () => console.log("🎧 Remote audio track muted");
-          event.track.onunmute = () => {
-            console.log("🎧 Remote audio track unmuted - audio should now be heard!");
-            // Force play the audio element when track becomes unmuted
+          event.track.onmute = () => {
+            console.log("🎧 Remote audio track muted");
+            // Essayer de forcer le play si l'audio était en cours
             const audioElement = remoteAudioRef.current;
             if (audioElement && audioElement.paused) {
-              audioElement.play().catch(e => console.warn("Could not auto-play on unmute:", e));
+              audioElement.play().catch(e => console.warn("Could not resume on mute:", e));
+            }
+          };
+          event.track.onunmute = () => {
+            console.log("🎧 Remote audio track unmuted - audio should now be heard!");
+            // Forcer le play de l'audio element quand le track se unmute
+            const audioElement = remoteAudioRef.current;
+            if (audioElement) {
+              audioElement.play().then(() => {
+                console.log("🎧 Audio element restarted after track unmute");
+              }).catch(e => console.warn("Could not play on unmute:", e));
             }
           };
           event.track.onended = () => console.log("🎧 Remote audio track ended");
@@ -2832,9 +2841,14 @@ useEffect(() => {
             if (remoteAudioRef.current && !remoteAudioRef.current.paused) {
               console.log("🎧 Audio element status - playing:", !remoteAudioRef.current.paused, "volume:", remoteAudioRef.current.volume, "muted:", remoteAudioRef.current.muted);
             }
+            // Also check remote track status
+            if (event.track) {
+              console.log("🎧 Remote track status check - enabled:", event.track.enabled, "readyState:", event.track.readyState, "muted:", event.track.muted);
+            }
           };
           setTimeout(checkAudioLevel, 1000);
           setTimeout(checkAudioLevel, 3000);
+          setTimeout(checkAudioLevel, 5000); // Check again after 5 seconds
 
           // Connect to audio element
           const audioElement = remoteAudioRef.current;
@@ -3001,6 +3015,16 @@ useEffect(() => {
       }
 
       console.log("🎙️ Local audio track ready:", localAudioTrack.enabled, localAudioTrack.readyState);
+
+      // Attendre un peu pour s'assurer que le track est stable (surtout important sur mobile)
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Vérifier à nouveau après le délai
+      if (localAudioTrack.readyState !== 'live' || localAudioTrack.muted) {
+        console.warn("⚠️ Local audio track became muted after delay, but proceeding anyway");
+      }
+
+      console.log("🎙️ Proceeding with offer creation after stability check");
 
       // Vérifier l'état des tracks locaux avant de créer l'offre
       if (localStreamRef.current) {
