@@ -2753,6 +2753,13 @@ useEffect(() => {
               
               if (average < 1) {
                 console.warn("⚠️ Local microphone may not be capturing audio properly (low levels)");
+                console.log("🔍 Debug info - track state:", {
+                  enabled: audioTrack.enabled,
+                  muted: audioTrack.muted,
+                  readyState: audioTrack.readyState,
+                  label: audioTrack.label,
+                  id: audioTrack.id
+                });
               } else {
                 console.log("✅ Local microphone appears to be working");
               }
