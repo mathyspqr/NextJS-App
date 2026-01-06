@@ -1248,14 +1248,13 @@ pendingIceRef.current = [];
 console.log('📤 Local description set for answer');
 
               console.log('📤 Envoi answer');
-await supabase.from('webrtc_signals').insert({
-  call_id: currentCall.id, // ✅ au lieu de activeCall?.id
-  sender_id: user.id,
-  receiver_id: otherUserId,
-  signal_type: 'answer',
-  signal_data: answer,
-});
-
+              await supabase.from('webrtc_signals').insert({
+                call_id: activeCall?.id,
+                sender_id: user.id,
+                receiver_id: otherUserId,
+                signal_type: 'answer',
+                signal_data: answer,
+              });
             }
 
             if (sig.signal_type === 'answer') {
@@ -2735,14 +2734,37 @@ useEffect(() => {
     // 2) Create peer connection if needed
     if (!pcRef.current) {
       console.log("🧩 Creating RTCPeerConnection...");
-      const pc = new RTCPeerConnection({
-        iceServers: [
+      
+      // Get ICE servers from environment or fallback to STUN only
+      let iceServers;
+      try {
+        const iceServersEnv = process.env.NEXT_PUBLIC_ICE_SERVERS;
+        if (iceServersEnv) {
+          iceServers = JSON.parse(iceServersEnv);
+          console.log("🧊 Using ICE servers from environment:", iceServers);
+        } else {
+          console.warn("⚠️ No NEXT_PUBLIC_ICE_SERVERS found, using STUN only. TURN recommended for production!");
+          iceServers = [
+            { urls: "stun:stun.l.google.com:19302" },
+            { urls: "stun:stun1.l.google.com:19302" },
+            { urls: "stun:stun2.l.google.com:19302" },
+            { urls: "stun:stun3.l.google.com:19302" },
+            { urls: "stun:stun4.l.google.com:19302" },
+          ];
+        }
+      } catch (e) {
+        console.error("❌ Error parsing NEXT_PUBLIC_ICE_SERVERS:", e);
+        iceServers = [
           { urls: "stun:stun.l.google.com:19302" },
           { urls: "stun:stun1.l.google.com:19302" },
           { urls: "stun:stun2.l.google.com:19302" },
           { urls: "stun:stun3.l.google.com:19302" },
           { urls: "stun:stun4.l.google.com:19302" },
-        ],
+        ];
+      }
+      
+      const pc = new RTCPeerConnection({
+        iceServers: iceServers,
         iceCandidatePoolSize: 10
       });
 
@@ -2985,13 +3007,13 @@ useEffect(() => {
       await pc.setLocalDescription(offer);
       console.log('📤 Offer created and set as local description');
 
-      await supabase.from('webrtc_signals').insert({
-        call_id: call.id,
-        sender_id: user.id,
-        receiver_id: activeConversationUser.id,
-        signal_type: 'offer',
-        signal_data: offer,
-      });
+await supabase.from('webrtc_signals').insert({
+  call_id: currentCall.id, // ✅ au lieu de activeCall?.id
+  sender_id: user.id,
+  receiver_id: otherUserId,
+  signal_type: 'answer',
+  signal_data: answer,
+});
 
       console.log('📤 Offer sent to database');
     } catch (e) {
@@ -3038,15 +3060,7 @@ if (offerErr) {
 if (existingOffer?.signal_data) {
   const pc = pcRef.current!;
   console.log('📥 Remote description set from fetched offer');
-  
-  
-  // ✅ appliquer les ICE bufferisés maintenant que remoteDescription existe
-for (const c of pendingIceRef.current) {
-  try { await pc.addIceCandidate(c); console.log('🧊 ICE buffered ajouté (accept)'); }
-  catch (e) { console.warn("ICE buffered failed (accept)", e); }
-}
-pendingIceRef.current = [];
-
+  await pc.setRemoteDescription(existingOffer.signal_data);
 
   const answer = await pc.createAnswer();
   await pc.setLocalDescription(answer);
