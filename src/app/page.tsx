@@ -2813,29 +2813,6 @@ useEffect(() => {
         iceCandidatePoolSize: 10
       });
 
-      // Set codec preferences for better mobile compatibility
-      pc.onnegotiationneeded = async () => {
-        try {
-          const offer = await pc.createOffer();
-          
-          // Prefer Opus codec for better mobile compatibility
-          const modifiedOffer = new RTCSessionDescription({
-            type: offer.type,
-            sdp: offer.sdp?.replace(
-              'm=audio 9 UDP/TLS/RTP/SAVPF',
-              'm=audio 9 UDP/TLS/RTP/SAVPF 111 103 104 9 102 0 8 106 105 13 110 112 113 126'
-            )
-          });
-          
-          await pc.setLocalDescription(modifiedOffer);
-          console.log('📤 Modified offer with codec preferences sent');
-        } catch (e) {
-          console.warn('⚠️ Could not modify offer with codec preferences:', e);
-          // Fallback to original offer
-          await pc.setLocalDescription(offer);
-        }
-      };
-
       // Store reference
       pcRef.current = pc;
 
