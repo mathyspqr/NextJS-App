@@ -2990,6 +2990,18 @@ useEffect(() => {
       // 2) setup WebRTC and send offer
       await ensurePeerConnection(call.id, activeConversationUser.id);
 
+      // Attendre que le track local soit prêt avant de créer l'offer
+      if (!localStreamRef.current || localStreamRef.current.getAudioTracks().length === 0) {
+        throw new Error("Microphone access failed - no audio track available");
+      }
+
+      const localAudioTrack = localStreamRef.current.getAudioTracks()[0];
+      if (!localAudioTrack || localAudioTrack.readyState !== 'live') {
+        throw new Error("Local audio track not ready");
+      }
+
+      console.log("🎙️ Local audio track ready:", localAudioTrack.enabled, localAudioTrack.readyState);
+
       // Vérifier l'état des tracks locaux avant de créer l'offre
       if (localStreamRef.current) {
         const audioTracks = localStreamRef.current.getAudioTracks();
@@ -3005,10 +3017,10 @@ useEffect(() => {
       console.log('📤 Offer created and set as local description');
 
       await supabase.from('webrtc_signals').insert({
-        call_id: call.id, // ✅ utiliser call.id au lieu de currentCall.id
+        call_id: call.id,
         sender_id: user.id,
-        receiver_id: activeConversationUser.id, // ✅ utiliser activeConversationUser.id
-        signal_type: 'offer', // ✅ c'est une offer, pas une answer
+        receiver_id: activeConversationUser.id,
+        signal_type: 'offer',
         signal_data: offer,
       });
 
