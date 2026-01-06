@@ -2725,6 +2725,42 @@ useEffect(() => {
           }
         });
         console.log("🎤 Microphone access granted");
+        
+        // Verify that the local audio track is actually capturing audio
+        const audioTrack = localStreamRef.current.getAudioTracks()[0];
+        if (audioTrack) {
+          console.log("🎙️ Testing local audio track...");
+          
+          // Create a temporary audio context to test the track
+          try {
+            const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+            const analyser = audioContext.createAnalyser();
+            const microphone = audioContext.createMediaStreamSource(localStreamRef.current);
+            microphone.connect(analyser);
+            
+            analyser.fftSize = 256;
+            const bufferLength = analyser.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+            
+            // Check audio levels after a short delay
+            setTimeout(() => {
+              analyser.getByteFrequencyData(dataArray);
+              const average = dataArray.reduce((a, b) => a + b) / bufferLength;
+              console.log("🎙️ Local audio level test - average:", average);
+              
+              if (average < 1) {
+                console.warn("⚠️ Local microphone may not be capturing audio properly (low levels)");
+              } else {
+                console.log("✅ Local microphone appears to be working");
+              }
+              
+              audioContext.close();
+            }, 1000);
+            
+          } catch (e) {
+            console.warn("⚠️ Could not test audio levels:", e);
+          }
+        }
       } catch (error) {
         console.error("❌ Microphone access denied:", error);
         throw new Error("Microphone access required for voice calls");
@@ -2895,6 +2931,39 @@ useEffect(() => {
             audioElement.volume = 1.0;
             audioElement.muted = false;
             console.log("🎧 Audio element configured - volume:", audioElement.volume, "muted:", audioElement.muted);
+
+            // Test remote audio levels
+            try {
+              const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+              const analyser = audioContext.createAnalyser();
+              const remoteSource = audioContext.createMediaStreamSource(remoteStreamRef.current);
+              remoteSource.connect(analyser);
+              
+              analyser.fftSize = 256;
+              const bufferLength = analyser.frequencyBinCount;
+              const dataArray = new Uint8Array(bufferLength);
+              
+              const checkRemoteLevels = () => {
+                analyser.getByteFrequencyData(dataArray);
+                const average = dataArray.reduce((a, b) => a + b) / bufferLength;
+                console.log("🎧 Remote audio level check - average:", average);
+                
+                if (average < 1) {
+                  console.warn("⚠️ Remote audio levels are very low or silent!");
+                } else {
+                  console.log("✅ Remote audio detected with levels:", average);
+                }
+              };
+              
+              setTimeout(checkRemoteLevels, 2000);
+              setTimeout(checkRemoteLevels, 4000);
+              
+              // Clean up after testing
+              setTimeout(() => audioContext.close(), 6000);
+              
+            } catch (e) {
+              console.warn("⚠️ Could not set up remote audio level monitoring:", e);
+            }
 
             // Add event listeners for debugging
             audioElement.onplaying = () => console.log("🎧 Audio element started playing");
