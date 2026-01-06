@@ -3007,13 +3007,13 @@ useEffect(() => {
       await pc.setLocalDescription(offer);
       console.log('📤 Offer created and set as local description');
 
-await supabase.from('webrtc_signals').insert({
-  call_id: currentCall.id, // ✅ au lieu de activeCall?.id
-  sender_id: user.id,
-  receiver_id: otherUserId,
-  signal_type: 'answer',
-  signal_data: answer,
-});
+      await supabase.from('webrtc_signals').insert({
+        call_id: call.id, // ✅ utiliser call.id au lieu de currentCall.id
+        sender_id: user.id,
+        receiver_id: activeConversationUser.id, // ✅ utiliser activeConversationUser.id
+        signal_type: 'offer', // ✅ c'est une offer, pas une answer
+        signal_data: offer,
+      });
 
       console.log('📤 Offer sent to database');
     } catch (e) {
