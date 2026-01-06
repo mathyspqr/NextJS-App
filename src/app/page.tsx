@@ -2455,6 +2455,13 @@ useEffect(() => {
     if (!user) return;
 
     try {
+      const { error } = await supabase
+        .from('friendships')
+        .delete()
+        .or(`and(requester_id.eq.${user.id},addressee_id.eq.${friendId}),and(requester_id.eq.${friendId},addressee_id.eq.${user.id})`);
+
+      if (error) throw error;
+
       // Supprimer tous les messages privés entre les deux utilisateurs
       const { error: messagesError } = await supabase
         .from('private_messages')
@@ -2463,34 +2470,7 @@ useEffect(() => {
 
       if (messagesError) {
         console.error('Erreur lors de la suppression des messages:', messagesError);
-        throw new Error('Impossible de supprimer les messages privés');
-      }
-
-      // Marquer cette conversation comme "reset" pour l'utilisateur courant (sécurité si la suppression DB échoue)
-      try {
-        const { error: upsertError } = await supabase
-          .from('hidden_conversations')
-          .upsert({ user_id: user.id, hidden_user_id: friendId });
-
-        if (upsertError) console.error('Erreur upsert hidden_conversations:', upsertError);
-      } catch (err) {
-        console.error('Erreur upsert hidden_conversations:', err);
-      }
-
-      // Supprimer la relation d'amitié
-      const { error } = await supabase
-        .from('friendships')
-        .delete()
-        .or(`and(requester_id.eq.${user.id},addressee_id.eq.${friendId}),and(requester_id.eq.${friendId},addressee_id.eq.${user.id})`);
-
-      if (error) throw error;
-
-      // Notifier l'autre utilisateur via un broadcast pour qu'il recharge ses conversations
-      try {
-        supabase.channel('private-activity').send({ type: 'friend_removed', payload: { from: user.id, to: friendId } });
-      } catch (err) {
-        // Ne pas bloquer l'opération si le broadcast échoue
-        console.error('Erreur broadcast friend_removed:', err);
+        // Ne pas échouer complètement si la suppression des messages échoue
       }
 
       // Supprimer la conversation de la liste visible
@@ -2512,9 +2492,6 @@ useEffect(() => {
       if (viewingProfile?.id === friendId) {
         setFriendshipStatus('none');
       }
-
-      // Recharger les conversations pour s'assurer qu'elles sont à jour
-      await loadConversations();
     } catch (err) {
       console.error('❌ Erreur suppression ami:', err);
       toast.error('Erreur lors de la suppression');
@@ -2671,24 +2648,6 @@ useEffect(() => {
   // ✅ Envoyer un message privé
   const sendPrivateMessage = async () => {
     if (!user || !activeConversation || (!newPrivateMessage.trim() && !privateImageFile)) return;
-
-    try {
-      // Vérifier qu'on est amis
-      const { data: friendship } = await supabase
-        .from('friendships')
-        .select('status')
-        .or(`and(requester_id.eq.${user.id},addressee_id.eq.${activeConversation}),and(requester_id.eq.${activeConversation},addressee_id.eq.${user.id})`)
-        .single();
-
-      if (!friendship || friendship.status !== 'accepted') {
-        toast.error('Vous devez être amis pour envoyer un message privé');
-        return;
-      }
-    } catch (err) {
-      console.error('❌ Erreur vérification amitié avant envoi:', err);
-      toast.error('Impossible de vérifier le statut d\'ami');
-      return;
-    }
 
     const messageContent = newPrivateMessage.trim();
     setNewPrivateMessage('');
@@ -3077,31 +3036,12 @@ useEffect(() => {
   };
 
   // ✅ Ouvrir une conversation
-  const openConversation = async (otherUser: {id: string, username: string, color: string, avatar_url: string | null, last_seen?: string | null}) => {
-    if (!user) return;
-
-    try {
-      // Vérifier si nous sommes amis
-      const { data: friendship } = await supabase
-        .from('friendships')
-        .select('status')
-        .or(`and(requester_id.eq.${user.id},addressee_id.eq.${otherUser.id}),and(requester_id.eq.${otherUser.id},addressee_id.eq.${user.id})`)
-        .single();
-
-      if (!friendship || friendship.status !== 'accepted') {
-        toast.info('Vous devez être amis pour envoyer un message privé');
-        return;
-      }
-
-      setActiveConversation(otherUser.id);
-      setActiveConversationUser(otherUser);
-      await loadPrivateMessages(otherUser.id);
-      // Réinitialiser l'image
-      cancelPrivateImage();
-    } catch (err) {
-      console.error('❌ Erreur ouverture conversation:', err);
-      toast.error('Impossible d\'ouvrir la conversation');
-    }
+  const openConversation = (otherUser: {id: string, username: string, color: string, avatar_url: string | null, last_seen?: string | null}) => {
+    setActiveConversation(otherUser.id);
+    setActiveConversationUser(otherUser);
+    loadPrivateMessages(otherUser.id);
+    // Réinitialiser l'image
+    cancelPrivateImage();
   };
 
   // ✅ Ouvrir la modale messages
