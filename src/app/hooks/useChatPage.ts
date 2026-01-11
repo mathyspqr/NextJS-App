@@ -11,7 +11,6 @@ import {
   Commentaire,
   Friend,
   FriendRequest,
-  FriendshipStatus,
   Message,
   ProfileData,
   User,
@@ -2140,6 +2139,8 @@ useEffect(() => {
     rejectFriendRequestFromProfile,
   };
 };
+
+
 
 
 
