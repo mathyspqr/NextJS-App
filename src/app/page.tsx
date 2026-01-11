@@ -1,16 +1,36 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { FaTrash, FaHeart, FaRegHeart, FaArrowRight, FaUser, FaSignOutAlt, FaEdit, FaCheck, FaTimes, FaSmile, FaImage, FaCamera, FaUserFriends, FaUserPlus, FaUserCheck, FaBell, FaUserMinus, FaEnvelope, FaPaperPlane, FaChevronLeft, FaUsers } from 'react-icons/fa';
 import Confetti from 'react-confetti';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-import CountUp from 'react-countup';
 
 import LoginRegister from './LoginRegister';
 import { createClient } from '../app/utils/supabase/client';
-import OnlineStatusIndicator from './components/UI/OnlineStatusIndicator';
 import { ONLINE_THRESHOLD_MS } from './constants/onlineStatus';
+import FriendsModal from './components/page/FriendsModal';
+import HeaderBar from './components/page/HeaderBar';
+import LightboxModal from './components/page/LightboxModal';
+import MessageComposer from './components/page/MessageComposer';
+import MessageList from './components/page/MessageList';
+import OnlineUsersModal from './components/page/OnlineUsersModal';
+import PrivateMessagesModal from './components/page/PrivateMessagesModal';
+import ProfileModal from './components/page/ProfileModal';
+import TypingIndicator from './components/page/TypingIndicator';
+import {
+  Commentaire,
+  Conversation,
+  ConversationUser,
+  Friend,
+  FriendRequest,
+  FriendshipStatus,
+  Message,
+  PrivateMessage,
+  ProfileData,
+  User,
+  VoiceCall,
+  WebRTCSignal,
+} from './types/chat';
 
 const supabase = createClient();
 
@@ -18,132 +38,6 @@ const BASE_URL = typeof window !== 'undefined' && window.location.hostname === '
   ? 'http://localhost:3001'
   : 'https://express-back-end-phi.vercel.app/api';
 const CONFETTI_DURATION = 3000;
-
-interface User {
-  id: string;
-  name: string;
-  color?: string;
-  avatar_url?: string;
-  bio?: string;
-  last_seen?: string | null;
-}
-
-interface Message {
-  id: number;
-  message: string;
-  liked: boolean;
-  likes: number;
-  user_id: string;
-  username?: string;
-  user_color?: string;
-  avatar_url?: string;
-  image_url?: string;
-  edited?: boolean;
-  last_seen?: string | null;
-}
-
-interface Commentaire {
-  id: number;
-  message_id: number;
-  user_id: string;
-  commentaire: string;
-  username?: string;
-  user_color?: string;
-  avatar_url?: string;
-}
-
-interface ProfileData {
-  id: string;
-  username: string;
-  color: string;
-  avatar_url: string | null;
-  bio: string | null;
-  last_seen: string | null;
-  isFriend?: boolean;
-}
-
-interface FriendRequest {
-  id: number;
-  requester_id: string;
-  addressee_id: string;
-  status: 'pending' | 'accepted' | 'rejected';
-  created_at: string;
-  requester?: {
-    username: string;
-    color: string;
-    avatar_url: string | null;
-  };
-  addressee?: {
-    username: string;
-    color: string;
-    avatar_url: string | null;
-  };
-}
-
-interface Friend {
-  id: string;
-  username: string;
-  color: string;
-  avatar_url: string | null;
-  bio: string | null;
-  last_seen: string | null;
-}
-
-interface PrivateMessage {
-  id: number;
-  sender_id: string;
-  receiver_id: string;
-  message: string;
-  image_url?: string | null;
-  created_at: string;
-  read: boolean;
-  sender?: {
-    id: string;
-    username: string;
-    color: string;
-    avatar_url: string | null;
-  };
-  receiver?: {
-    id: string;
-    username: string;
-    color: string;
-    avatar_url: string | null;
-  };
-}
-
-interface Conversation {
-  odId: string;
-  odUsername: string;
-  odColor: string;
-  odAvatar: string | null;
-  odLastSeen: string | null;
-  lastMessage: string;
-  lastMessageTime: string;
-  unreadCount: number;
-}
-
-interface VoiceCall {
-  id: string;
-  caller_id: string;
-  receiver_id: string;
-  status: 'calling' | 'ringing' | 'connected' | 'ended' | 'missed';
-  started_at: string | null;
-  ended_at: string | null;
-  duration_seconds: number | null;
-  created_at: string;
-}
-
-interface WebRTCSignal {
-  id: string;
-  call_id: string;
-  sender_id: string;
-  receiver_id: string;
-  signal_type: 'offer' | 'answer' | 'ice_candidate';
-  signal_data: RTCSessionDescriptionInit | RTCIceCandidateInit | null;
-  created_at: string;
-}
-
-
 
 async function getAuthHeader(): Promise<{ Authorization?: string }> {
   const { data } = await supabase.auth.getSession();
@@ -205,7 +99,7 @@ const Page = () => {
   const [friends, setFriends] = useState<Friend[]>([]);
   const [friendRequests, setFriendRequests] = useState<FriendRequest[]>([]);
   const [loadingFriends, setLoadingFriends] = useState(false);
-  const [friendshipStatus, setFriendshipStatus] = useState<'none' | 'pending_sent' | 'pending_received' | 'accepted'>('none');
+  const [friendshipStatus, setFriendshipStatus] = useState<FriendshipStatus>('none');
   const [sendingFriendRequest, setSendingFriendRequest] = useState(false);
   const [showMessagesModal, setShowMessagesModal] = useState(false);
   const [closingMessagesModal, setClosingMessagesModal] = useState(false);
@@ -215,7 +109,7 @@ const Page = () => {
   const [loadingOnlineUsers, setLoadingOnlineUsers] = useState(false);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversation, setActiveConversation] = useState<string | null>(null);
-  const [activeConversationUser, setActiveConversationUser] = useState<{id: string, username: string, color: string, avatar_url: string | null, last_seen?: string | null} | null>(null);
+  const [activeConversationUser, setActiveConversationUser] = useState<ConversationUser | null>(null);
   const [privateMessages, setPrivateMessages] = useState<PrivateMessage[]>([]);
   const [newPrivateMessage, setNewPrivateMessage] = useState('');
   const [privateImagePreview, setPrivateImagePreview] = useState<string | null>(null);
@@ -3036,7 +2930,7 @@ useEffect(() => {
   };
 
   // ✅ Ouvrir une conversation
-  const openConversation = (otherUser: {id: string, username: string, color: string, avatar_url: string | null, last_seen?: string | null}) => {
+  const openConversation = (otherUser: ConversationUser) => {
     setActiveConversation(otherUser.id);
     setActiveConversationUser(otherUser);
     loadPrivateMessages(otherUser.id);
@@ -3141,6 +3035,28 @@ useEffect(() => {
     });
   };
 
+  const acceptFriendRequestFromProfile = async () => {
+    if (!viewingProfile || !user?.id) return;
+    const { data } = await supabase
+      .from('friendships')
+      .select('id')
+      .eq('requester_id', viewingProfile.id)
+      .eq('addressee_id', user.id)
+      .single();
+    if (data) acceptFriendRequest(data.id, viewingProfile.id);
+  };
+
+  const rejectFriendRequestFromProfile = async () => {
+    if (!viewingProfile || !user?.id) return;
+    const { data } = await supabase
+      .from('friendships')
+      .select('id')
+      .eq('requester_id', viewingProfile.id)
+      .eq('addressee_id', user.id)
+      .single();
+    if (data) rejectFriendRequest(data.id);
+  };
+
   if (!isAuthenticated) {
     return (
       <LoginRegister
@@ -3157,1202 +3073,184 @@ useEffect(() => {
       {showConfetti && <Confetti />}
       <ToastContainer position="top-right" />
 
-      {/* ✅ Lightbox pour afficher les images en grand */}
-      {lightboxImage && (
-        <div 
-          className="fixed inset-0 bg-black/90 flex items-center justify-center z-[200] animate-fade-in cursor-zoom-out"
-          onClick={() => setLightboxImage(null)}
-        >
-          <button
-            onClick={() => setLightboxImage(null)}
-            className="absolute top-4 right-4 text-white/80 hover:text-white bg-black/50 rounded-full p-3 transition-colors z-10"
-          >
-            <FaTimes size={24} />
-          </button>
-          <img 
-            src={lightboxImage} 
-            alt="Image en grand" 
-            className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg shadow-2xl animate-scale-in"
-            onClick={(e) => e.stopPropagation()}
-          />
-          <a
-            href={lightboxImage}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={(e) => e.stopPropagation()}
-            className="absolute bottom-4 right-4 text-white/80 hover:text-white bg-black/50 rounded-full px-4 py-2 transition-colors flex items-center space-x-2"
-          >
-            <FaImage size={16} />
-            <span>Ouvrir dans un nouvel onglet</span>
-          </a>
-        </div>
-      )}
+      <LightboxModal imageUrl={lightboxImage} onClose={() => setLightboxImage(null)} />
 
-      {/* ✅ Modale de profil utilisateur */}
-      {(showProfileModal || closingProfileModal) && (
-        <div 
-          className={`fixed inset-0 bg-black/50 flex items-center justify-center z-[100] ${closingProfileModal ? 'animate-fade-out' : 'animate-fade-in'}`}
-          onClick={closeProfileModal}
-        >
-          <div 
-            ref={profileModalRef}
-            className={`bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 ${closingProfileModal ? 'animate-fade-out' : 'animate-scale-in'}`}
-            onClick={(e) => e.stopPropagation()}
-          >
-            {loadingProfile ? (
-              <div className="p-8 flex flex-col items-center justify-center">
-                <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-                <p className="text-gray-500">Chargement du profil...</p>
-              </div>
-            ) : viewingProfile ? (
-              <>
-                {/* Header coloré */}
-                <div 
-                  className="h-24 relative rounded-t-2xl"
-                  style={{ backgroundColor: viewingProfile.color || '#3B82F6' }}
-                >
-                  <button
-                    onClick={closeProfileModal}
-                    className="absolute top-3 right-3 text-white/80 hover:text-white bg-black/20 rounded-full p-2 transition-colors"
-                  >
-                    <FaTimes size={16} />
-                  </button>
-                </div>
+      <ProfileModal
+        show={showProfileModal}
+        isClosing={closingProfileModal}
+        onClose={closeProfileModal}
+        profileModalRef={profileModalRef}
+        loadingProfile={loadingProfile}
+        viewingProfile={viewingProfile}
+        currentUser={user}
+        friendshipStatus={friendshipStatus}
+        sendingFriendRequest={sendingFriendRequest}
+        onSendFriendRequest={sendFriendRequest}
+        onAcceptFriendRequest={acceptFriendRequestFromProfile}
+        onRejectFriendRequest={rejectFriendRequestFromProfile}
+        onRemoveFriend={removeFriend}
+        onStartConversation={startConversationFromProfile}
+      />
 
-                {/* Avatar */}
-                <div className="flex justify-center -mt-12 relative z-10">
-                  <div className="relative">
-                    {viewingProfile.avatar_url ? (
-                      <img 
-                        src={viewingProfile.avatar_url} 
-                        alt="Avatar"
-                        className="w-24 h-24 rounded-full object-cover border-4 border-white shadow-lg"
-                      />
-                    ) : (
-                      <div 
-                        className="w-24 h-24 rounded-full flex items-center justify-center text-white text-3xl font-bold border-4 border-white shadow-lg"
-                        style={{ backgroundColor: viewingProfile.color || '#3B82F6' }}
-                      >
-                        {(viewingProfile.username || 'U')[0].toUpperCase()}
-                      </div>
-                    )}
-                    {viewingProfile.id !== user?.id && (
-                      <div className="absolute bottom-0 right-0">
-                        <OnlineStatusIndicator lastSeen={viewingProfile.last_seen} size="lg" showOfflineAsOrange={true} className="border-2 border-white" />
-                      </div>
-                    )}
-                  </div>
-                </div>
+      <FriendsModal
+        show={showFriendsModal}
+        isClosing={closingFriendsModal}
+        onClose={closeFriendsModal}
+        currentUser={user}
+        friendRequests={friendRequests}
+        friends={friends}
+        loadingFriends={loadingFriends}
+        onAcceptFriendRequest={acceptFriendRequest}
+        onRejectFriendRequest={rejectFriendRequest}
+        onViewProfile={(userId) => {
+          closeFriendsModal();
+          handleViewProfile(userId);
+        }}
+        onStartConversation={(friend) => {
+          closeFriendsModal();
+          setShowMessagesModal(true);
+          openConversation({
+            id: friend.id,
+            username: friend.username,
+            color: friend.color,
+            avatar_url: friend.avatar_url,
+            last_seen: friend.last_seen,
+          });
+        }}
+        onRemoveFriend={removeFriend}
+      />
 
-                {/* Infos */}
-                <div className="p-6 text-center">
-                  <h2 
-                    className="text-2xl font-bold mb-1"
-                    style={{ color: viewingProfile.color || '#3B82F6' }}
-                  >
-                    {viewingProfile.username || 'Utilisateur'}
-                  </h2>
-                  
-                  {viewingProfile.id === user?.id && (
-                    <span className="inline-block px-2 py-0.5 bg-blue-100 text-blue-600 text-xs rounded-full mb-3">
-                      C&apos;est vous !
-                    </span>
-                  )}
+      <OnlineUsersModal
+        show={showOnlineUsersModal}
+        isClosing={closingOnlineUsersModal}
+        onClose={closeOnlineUsersModal}
+        loadingOnlineUsers={loadingOnlineUsers}
+        onlineUsers={onlineUsers}
+        onViewProfile={(userId) => {
+          handleViewProfile(userId);
+          closeOnlineUsersModal();
+        }}
+        onSendFriendRequest={sendFriendRequest}
+      />
 
-                  <div className="mt-4 bg-gray-50 rounded-xl p-4">
-                    <p className="text-xs text-gray-500 uppercase tracking-wide mb-2 font-semibold">Biographie</p>
-                    {viewingProfile.bio ? (
-                      <p className="text-gray-700 whitespace-pre-wrap">{viewingProfile.bio}</p>
-                    ) : (
-                      <p className="text-gray-400 italic">Aucune biographie</p>
-                    )}
-                  </div>
-
-                  {/* Boutons d'action amitié */}
-                  {viewingProfile.id !== user?.id && (
-                    <div className="mt-4">
-                      {friendshipStatus === 'none' && (
-                        <button
-                          onClick={() => sendFriendRequest(viewingProfile.id)}
-                          disabled={sendingFriendRequest}
-                          className="w-full py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors font-medium flex items-center justify-center space-x-2 disabled:bg-blue-400"
-                        >
-                          <FaUserPlus size={16} />
-                          <span>{sendingFriendRequest ? 'Envoi...' : 'Ajouter en ami'}</span>
-                        </button>
-                      )}
-                      {friendshipStatus === 'pending_sent' && (
-                        <button
-                          disabled
-                          className="w-full py-3 bg-yellow-100 text-yellow-700 rounded-xl font-medium flex items-center justify-center space-x-2"
-                        >
-                          <FaUserPlus size={16} />
-                          <span>Demande envoyée</span>
-                        </button>
-                      )}
-                      {friendshipStatus === 'pending_received' && (
-                        <div className="space-y-2">
-                          <p className="text-sm text-gray-500 text-center mb-2">Cette personne vous a envoyé une demande</p>
-                          <div className="flex space-x-2">
-                            <button
-                              onClick={async () => {
-                                const { data } = await supabase
-                                  .from('friendships')
-                                  .select('id')
-                                  .eq('requester_id', viewingProfile.id)
-                                  .eq('addressee_id', user?.id)
-                                  .single();
-                                if (data) acceptFriendRequest(data.id, viewingProfile.id);
-                              }}
-                              className="flex-1 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-colors font-medium flex items-center justify-center space-x-2"
-                            >
-                              <FaCheck size={14} />
-                              <span>Accepter</span>
-                            </button>
-                            <button
-                              onClick={async () => {
-                                const { data } = await supabase
-                                  .from('friendships')
-                                  .select('id')
-                                  .eq('requester_id', viewingProfile.id)
-                                  .eq('addressee_id', user?.id)
-                                  .single();
-                                if (data) rejectFriendRequest(data.id);
-                              }}
-                              className="flex-1 py-3 bg-red-100 text-red-600 rounded-xl hover:bg-red-200 transition-colors font-medium flex items-center justify-center space-x-2"
-                            >
-                              <FaTimes size={14} />
-                              <span>Refuser</span>
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                      {friendshipStatus === 'accepted' && (
-                        <div className="space-y-2">
-                          <div className="py-3 bg-green-100 text-green-700 rounded-xl font-medium flex items-center justify-center space-x-2">
-                            <FaUserCheck size={16} />
-                            <span>Vous êtes amis</span>
-                            <button
-                              onClick={startConversationFromProfile}
-                              className="ml-2 p-2 text-green-600 hover:text-purple-500 hover:bg-purple-50 rounded-full transition-colors"
-                              title="Envoyer un message"
-                            >
-                              <FaEnvelope size={16} />
-                            </button>
-                          </div>
-                          <button
-                            onClick={() => removeFriend(viewingProfile.id)}
-                            className="w-full py-2 text-red-500 hover:text-red-600 text-sm transition-colors"
-                          >
-                            Retirer des amis
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  <button
-                    onClick={closeProfileModal}
-                    className="mt-4 w-full py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors font-medium"
-                  >
-                    Fermer
-                  </button>
-                </div>
-              </>
-            ) : null}
-          </div>
-        </div>
-      )}
-
-      {/* ✅ Modale liste d'amis */}
-      {(showFriendsModal || closingFriendsModal) && (
-        <div 
-          className={`fixed inset-0 bg-black/50 flex items-center justify-center z-[100] ${closingFriendsModal ? 'animate-fade-out' : 'animate-fade-in'}`}
-          onClick={closeFriendsModal}
-        >
-          <div 
-            className={`bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 max-h-[80vh] overflow-hidden ${closingFriendsModal ? 'animate-fade-out' : 'animate-scale-in'}`}
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Header */}
-            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between" style={{ backgroundColor: user?.color || '#3B82F6' }}>
-              <h2 className="text-xl font-bold text-white flex items-center space-x-2">
-                <FaUserFriends size={20} />
-                <span>Mes amis</span>
-              </h2>
-              <button
-                onClick={closeFriendsModal}
-                className="text-white/80 hover:text-white transition-colors"
-              >
-                <FaTimes size={20} />
-              </button>
-            </div>
-
-            <div className="overflow-y-auto max-h-[calc(80vh-120px)]">
-              {/* Demandes en attente */}
-              {friendRequests.length > 0 && (
-                <div className="p-4 bg-yellow-50 border-b border-yellow-100">
-                  <p className="text-sm font-semibold text-yellow-800 mb-3 flex items-center space-x-2">
-                    <FaBell size={14} />
-                    <span>Demandes en attente ({friendRequests.length})</span>
-                  </p>
-                  <div className="space-y-2">
-                    {friendRequests.map((request) => (
-                      <div key={request.id} className="flex items-center justify-between bg-white p-3 rounded-lg shadow-sm">
-                        <div 
-                          className="flex items-center space-x-3 cursor-pointer"
-                          onClick={() => {
-                            closeFriendsModal();
-                            handleViewProfile(request.requester_id);
-                          }}
-                        >
-                          {request.requester?.avatar_url ? (
-                            <img src={request.requester.avatar_url} alt="" className="w-10 h-10 rounded-full object-cover" />
-                          ) : (
-                            <div 
-                              className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold"
-                              style={{ backgroundColor: request.requester?.color || '#3B82F6' }}
-                            >
-                              {(request.requester?.username || 'U')[0].toUpperCase()}
-                            </div>
-                          )}
-                          <span className="font-medium text-gray-800">{request.requester?.username}</span>
-                        </div>
-                        <div className="flex space-x-2">
-                          <button
-                            onClick={() => acceptFriendRequest(request.id, request.requester_id)}
-                            className="p-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
-                          >
-                            <FaCheck size={12} />
-                          </button>
-                          <button
-                            onClick={() => rejectFriendRequest(request.id)}
-                            className="p-2 bg-red-100 text-red-500 rounded-lg hover:bg-red-200 transition-colors"
-                          >
-                            <FaTimes size={12} />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Liste d'amis */}
-              <div className="p-4">
-                {loadingFriends ? (
-                  <div className="flex flex-col items-center justify-center py-8">
-                    <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-3"></div>
-                    <p className="text-gray-500">Chargement...</p>
-                  </div>
-                ) : friends.length > 0 ? (
-                  <div className="space-y-2">
-                    {friends.map((friend) => (
-                      <div 
-                        key={friend.id} 
-                        className="flex items-center justify-between p-3 rounded-xl hover:bg-gray-50 transition-colors cursor-pointer"
-                        onClick={() => {
-                          closeFriendsModal();
-                          handleViewProfile(friend.id);
-                        }}
-                      >
-                        <div className="flex items-center space-x-3">
-                          <div className="relative">
-                            {friend.avatar_url ? (
-                              <img src={friend.avatar_url} alt="" className="w-12 h-12 rounded-full object-cover border-2" style={{ borderColor: friend.color }} />
-                            ) : (
-                              <div 
-                                className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold"
-                                style={{ backgroundColor: friend.color }}
-                              >
-                                {(friend.username || 'U')[0].toUpperCase()}
-                              </div>
-                            )}
-                            <div className="absolute bottom-0 right-0">
-                              <OnlineStatusIndicator lastSeen={friend.last_seen} size="md" showOfflineAsOrange={true} className="border-2 border-white" />
-                            </div>
-                          </div>
-                          <div>
-                            <p className="font-semibold" style={{ color: friend.color }}>{friend.username}</p>
-                            {friend.bio && (
-                              <p className="text-xs text-gray-500 truncate max-w-[180px]">{friend.bio}</p>
-                            )}
-                          </div>
-                        </div>
-                        <div className="flex items-center space-x-1">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              closeFriendsModal();
-                              setShowMessagesModal(true);
-                              openConversation({
-                                id: friend.id,
-                                username: friend.username,
-                                color: friend.color,
-                                avatar_url: friend.avatar_url,
-                                last_seen: friend.last_seen
-                              });
-                            }}
-                            className="p-2 text-gray-400 hover:text-purple-500 hover:bg-purple-50 rounded-lg transition-colors"
-                            title="Envoyer un message"
-                          >
-                            <FaEnvelope size={14} />
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              removeFriend(friend.id);
-                            }}
-                            className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                            title="Retirer des amis"
-                          >
-                            <FaUserMinus size={14} />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-8">
-                    <FaUserFriends className="mx-auto text-gray-300 mb-3" size={48} />
-                    <p className="text-gray-500">Vous n&apos;avez pas encore d&apos;amis</p>
-                    <p className="text-sm text-gray-400 mt-1">Cliquez sur le profil d&apos;un utilisateur pour l&apos;ajouter</p>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ✅ Modale Messages privés */}
-      {/* Modal Utilisateurs en ligne */}
-      {(showOnlineUsersModal || closingOnlineUsersModal) && (
-        <div 
-          className={`fixed inset-0 bg-black/50 flex items-center justify-center z-[100] ${closingOnlineUsersModal ? 'animate-fade-out' : 'animate-fade-in'}`}
-          onClick={closeOnlineUsersModal}
-        >
-          <div 
-            className={`bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 max-h-[80vh] overflow-hidden ${closingOnlineUsersModal ? 'animate-fade-out' : 'animate-scale-in'}`}
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Header */}
-            <div className="bg-gradient-to-r from-green-500 to-emerald-500 px-6 py-4 flex justify-between items-center">
-              <div className="flex items-center space-x-2">
-                <FaUsers className="text-white" size={20} />
-                <h2 className="text-xl font-bold text-white">Utilisateurs en ligne</h2>
-              </div>
-              <button
-                onClick={closeOnlineUsersModal}
-                className="text-white hover:bg-white/20 p-2 rounded-lg transition-colors duration-200"
-              >
-                <FaTimes size={20} />
-              </button>
-            </div>
-
-            {/* Liste des utilisateurs */}
-            <div className="overflow-y-auto max-h-[calc(80vh-80px)]">
-              {loadingOnlineUsers ? (
-                <div className="flex items-center justify-center py-12">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
-                </div>
-              ) : onlineUsers.length === 0 ? (
-                <div className="text-center py-12 text-gray-500">
-                  <FaUsers size={48} className="mx-auto mb-4 text-gray-300" />
-                  <p>Aucun utilisateur en ligne pour le moment</p>
-                </div>
-              ) : (
-                <div className="divide-y divide-gray-100">
-                  {onlineUsers.map((onlineUser) => (
-                    <div
-                      key={onlineUser.id}
-                      className="p-4 hover:bg-gray-50 transition-colors duration-200"
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-3 flex-1 cursor-pointer group" onClick={() => {
-                          handleViewProfile(onlineUser.id);
-                          closeOnlineUsersModal();
-                        }}>
-                          {/* Avatar */}
-                          <div className="relative">
-                            {onlineUser.avatar_url ? (
-                              <img
-                                src={onlineUser.avatar_url}
-                                alt={onlineUser.username}
-                                className="w-12 h-12 rounded-full object-cover border-2 group-hover:scale-110 transition-transform"
-                                style={{ borderColor: onlineUser.color || '#3B82F6' }}
-                              />
-                            ) : (
-                              <div
-                                className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold group-hover:scale-110 transition-transform"
-                                style={{ backgroundColor: onlineUser.color || '#3B82F6' }}
-                              >
-                                <FaUser className="text-white" size={20} />
-                              </div>
-                            )}
-                            <OnlineStatusIndicator
-                              lastSeen={onlineUser.last_seen}
-                              size="md"
-                              className="absolute bottom-0 right-0 border-2 border-white"
-                            />
-                          </div>
-
-                          {/* Info utilisateur */}
-                          <div className="flex-1 min-w-0 text-left">
-                            <p
-                              className="font-semibold truncate group-hover:underline cursor-pointer transition-all"
-                              style={{ color: onlineUser.color || '#3B82F6' }}
-                            >
-                              {onlineUser.username}
-                            </p>
-                            {onlineUser.bio && (
-                              <p className="text-xs text-gray-500 truncate">{onlineUser.bio}</p>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Actions */}
-                        <div className="flex items-center space-x-2 ml-2">
-                          {onlineUser.isFriend ? (
-                            <div className="flex items-center space-x-1 px-3 py-1.5 bg-green-50 text-green-600 rounded-lg text-sm font-medium">
-                              <FaUserCheck size={14} />
-                              <span>Ami</span>
-                            </div>
-                          ) : (
-                            <button
-                              onClick={() => {
-                                sendFriendRequest(onlineUser.id);
-                              }}
-                              className="p-2 text-green-500 hover:bg-green-50 rounded-lg transition-colors duration-200"
-                              title="Ajouter en ami"
-                            >
-                              <FaUserPlus size={16} />
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {(showMessagesModal || closingMessagesModal) && (
-        <div 
-          className={`fixed inset-0 bg-black/50 flex items-center justify-center z-[100] ${closingMessagesModal ? 'animate-fade-out' : 'animate-fade-in'}`}
-          onClick={closeMessagesModal}
-        >
-          <div 
-            className={`bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 max-h-[85vh] overflow-hidden animate-scale-in flex flex-col ${closingMessagesModal ? 'animate-fade-out' : ''}`}
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Header */}
-            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between bg-gradient-to-r from-purple-500 to-purple-600">
-              {activeConversation && activeConversationUser ? (
-                <>
-                  <div className="flex items-center space-x-3">
-                    <button
-                      onClick={() => {
-                        setActiveConversation(null);
-                        setActiveConversationUser(null);
-                        loadConversations();
-                      }}
-                      className="text-white/80 hover:text-white transition-colors p-1"
-                    >
-                      <FaChevronLeft size={18} />
-                    </button>
-                    <div className="relative">
-                      {activeConversationUser.avatar_url ? (
-                        <img 
-                          src={activeConversationUser.avatar_url} 
-                          alt="" 
-                          className="w-10 h-10 rounded-full object-cover border-2 border-white/30"
-                        />
-                      ) : (
-                        <div 
-                          className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold"
-                          style={{ backgroundColor: activeConversationUser.color }}
-                        >
-                          {activeConversationUser.username[0].toUpperCase()}
-                        </div>
-                      )}
-                      <div className="absolute bottom-0 right-0">
-                        <OnlineStatusIndicator lastSeen={activeConversationUser.last_seen} size="sm" showOfflineAsOrange={true} className="border-2 border-white" />
-                      </div>
-                    </div>
-                    <span className="text-white font-semibold">{activeConversationUser.username}</span>
-                  </div>
-                </>
-              ) : (
-                <h2 className="text-xl font-bold text-white flex items-center space-x-2">
-                  <FaEnvelope size={20} />
-                  <span>Messages privés</span>
-                </h2>
-              )}
-              {activeConversation && activeConversationUser && (
-  <button
-    onClick={startVoiceCall}
-    className="text-white/80 hover:text-white transition-colors mr-3"
-    title="Appel vocal"
-  >
-    📞
-  </button>
-)}
-
-              <button
-                onClick={closeMessagesModal}
-                className="text-white/80 hover:text-white transition-colors"
-              >
-                <FaTimes size={20} />
-              </button>
-              
-            </div>
-
-            {/* 🎙️ Remote audio (caché) */}
-<audio ref={remoteAudioRef} autoPlay playsInline />
-
-{/* 📲 Incoming call banner */}
-{incomingCall && (
-  <div className="px-6 py-3 bg-yellow-50 border-b border-yellow-200 flex items-center justify-between">
-    <div className="text-sm text-yellow-800">
-      Appel entrant…
-    </div>
-    <div className="flex items-center gap-2">
-      <button
-        onClick={() => acceptVoiceCall(incomingCall)}
-        className="px-3 py-1 rounded-lg bg-green-600 text-white text-sm"
-      >
-        Accepter
-      </button>
-      <button
-        onClick={() => declineVoiceCall(incomingCall)}
-        className="px-3 py-1 rounded-lg bg-red-600 text-white text-sm"
-      >
-        Refuser
-      </button>
-    </div>
-  </div>
-)}
-
-{/* ✅ In-call controls */}
-{activeCall && callStatus !== 'idle' && (
-  <div className="px-6 py-3 bg-purple-50 border-b border-purple-200 flex items-center justify-between">
-    <div className="text-sm text-purple-800">
-      {callStatus === 'calling' && 'Appel en cours…'}
-      {callStatus === 'ringing' && 'Ça sonne…'}
-      {callStatus === 'connecting' && 'Connexion en cours…'}
-      {callStatus === 'connected' && 'En appel'}
-      {audioNeedsInteraction && (
-        <div className="mt-1 text-xs text-orange-600 font-medium">
-          🔊 Touchez l&apos;écran pour activer l&apos;audio
-        </div>
-      )}
-    </div>
-    <div className="flex items-center gap-2">
-      {audioNeedsInteraction && (
-        <button
-          onClick={() => {
-            if (remoteAudioRef.current) {
-              remoteAudioRef.current.play().then(() => {
-                console.log("🎧 Manual audio play successful");
+      <PrivateMessagesModal
+        show={showMessagesModal}
+        isClosing={closingMessagesModal}
+        onClose={closeMessagesModal}
+        activeConversation={activeConversation}
+        activeConversationUser={activeConversationUser}
+        onBackToConversations={() => {
+          setActiveConversation(null);
+          setActiveConversationUser(null);
+          loadConversations();
+        }}
+        onStartVoiceCall={startVoiceCall}
+        incomingCallLabel={incomingCall ? 'Appel entrant…' : null}
+        onAcceptIncomingCall={() => {
+          if (incomingCall) acceptVoiceCall(incomingCall);
+        }}
+        onDeclineIncomingCall={() => {
+          if (incomingCall) declineVoiceCall(incomingCall);
+        }}
+        callStatusLabel={
+          activeCall && callStatus !== 'idle'
+            ? callStatus === 'calling'
+              ? 'Appel en cours…'
+              : callStatus === 'ringing'
+                ? 'Ça sonne…'
+                : callStatus === 'connecting'
+                  ? 'Connexion en cours…'
+                  : 'En appel'
+            : null
+        }
+        audioNeedsInteraction={audioNeedsInteraction}
+        onActivateAudio={() => {
+          if (remoteAudioRef.current) {
+            remoteAudioRef.current
+              .play()
+              .then(() => {
+                console.log('🎧 Manual audio play successful');
                 setAudioNeedsInteraction(false);
-              }).catch(e => {
-                console.error("❌ Manual audio play failed:", e);
+              })
+              .catch((e) => {
+                console.error('❌ Manual audio play failed:', e);
               });
-            }
-          }}
-          className="px-3 py-1 rounded-lg bg-orange-500 text-white text-sm hover:bg-orange-600"
-        >
-          🔊 Activer audio
-        </button>
-      )}
-      <button
-        onClick={toggleMute}
-        className={`px-3 py-1 rounded-lg border text-sm flex items-center space-x-2 ${
-          isMuted ? 'bg-red-100 text-red-700 border-red-300' : 'bg-white text-gray-700 border-gray-300'
-        }`}
-      >
-        <span>{isMuted ? '🔇' : '🎤'}</span>
-        <span>{isMuted ? 'Unmute' : 'Mute'}</span>
-        {microphoneActive && !isMuted && (
-          <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-        )}
-      </button>
-      <button
-        onClick={hangupVoiceCall}
-        className="px-3 py-1 rounded-lg bg-red-600 text-white text-sm"
-      >
-        Raccrocher
-      </button>
-    </div>
-  </div>
-)}
-
-
-            {/* Contenu */}
-            {activeConversation && activeConversationUser ? (
-              // Vue conversation
-              <div className="flex flex-col flex-1 overflow-hidden">
-                {/* Messages */}
-                <div ref={privateMessagesContainerRef} className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50 scrollbar-purple">
-                  {loadingPrivateMessages ? (
-                    <div className="flex justify-center py-8">
-                      <div className="w-8 h-8 border-4 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
-                    </div>
-                  ) : privateMessages.length === 0 ? (
-                    <div className="text-center py-8 text-gray-500">
-                      <FaEnvelope className="mx-auto mb-3 text-gray-300" size={40} />
-                      <p>Aucun message pour le moment</p>
-                      <p className="text-sm mt-1">Envoyez le premier message !</p>
-                    </div>
-                  ) : (
-                    privateMessages.map((msg) => (
-                      <div 
-                        key={msg.id}
-                        className={`flex ${msg.sender_id === user?.id ? 'justify-end' : 'justify-start'}`}
-                      >
-                        <div 
-                          className={`max-w-[75%] rounded-2xl ${
-                            msg.sender_id === user?.id 
-                              ? 'bg-purple-500 text-white rounded-br-md' 
-                              : 'bg-white text-gray-800 rounded-bl-md shadow-sm'
-                          } ${msg.image_url ? 'p-1' : 'px-4 py-2'}`}
-                        >
-                          {msg.image_url && (
-                            <img 
-                              src={msg.image_url} 
-                              alt="Image" 
-                              className="rounded-xl max-w-full max-h-64 object-contain cursor-zoom-in hover:opacity-90 transition-opacity"
-                              onClick={() => setLightboxImage(msg.image_url!)}
-                            />
-                          )}
-                          {msg.message && msg.message !== '📷 Image' && (
-                            <p className={`break-words ${msg.image_url ? 'px-3 py-1' : ''}`}>{msg.message}</p>
-                          )}
-                          <p className={`text-xs mt-1 ${msg.image_url ? 'px-3 pb-1' : ''} ${msg.sender_id === user?.id ? 'text-purple-200' : 'text-gray-400'}`}>
-                            {new Date(msg.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
-                          </p>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                  {/* Indicateur de frappe */}
-                  {privateTypingUser && (
-                    <div className="flex justify-start">
-                      <div className="bg-gray-200 text-gray-600 px-4 py-2 rounded-2xl rounded-bl-md text-sm italic flex items-center space-x-2">
-                        <span>{privateTypingUser} est en train d&apos;écrire</span>
-                        <span className="flex ml-1 space-x-0.5">
-                          <span className="w-1 h-1 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
-                          <span className="w-1 h-1 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
-                          <span className="w-1 h-1 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
-                        </span>
-                      </div>
-                    </div>
-                  )}
-                  <div ref={privateMessagesEndRef} />
-                </div>
-
-                {/* Preview image */}
-                {privateImagePreview && (
-                  <div className="px-4 py-2 border-t border-gray-100 bg-gray-50">
-                    <div className="relative inline-block">
-                      <img 
-                        src={privateImagePreview} 
-                        alt="Preview" 
-                        className="h-20 w-auto rounded-lg object-cover"
-                      />
-                      <button
-                        onClick={cancelPrivateImage}
-                        className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 transition-colors"
-                      >
-                        <FaTimes size={12} />
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {/* Input */}
-                <div className="p-4 border-t border-gray-200 bg-white">
-                  {/* Input caché pour l'image */}
-                  <input
-                    type="file"
-                    ref={privateImageInputRef}
-                    onChange={handlePrivateImageSelect}
-                    accept="image/*"
-                    className="hidden"
-                  />
-                  <div className="flex items-center space-x-2">
-                    <button
-                      onClick={() => privateImageInputRef.current?.click()}
-                      disabled={sendingPrivateImage}
-                      className="p-2 text-gray-500 hover:text-purple-500 hover:bg-purple-50 rounded-full transition-colors disabled:opacity-50"
-                      title="Envoyer une image"
-                    >
-                      <FaImage size={18} />
-                    </button>
-                    <input
-                      type="text"
-                      value={newPrivateMessage}
-                      onChange={(e) => {
-                        setNewPrivateMessage(e.target.value);
-                        if (e.target.value.trim()) {
-                          handlePrivateTyping();
-                        }
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && !e.shiftKey) {
-                          e.preventDefault();
-                          stopPrivateTyping();
-                          sendPrivateMessage();
-                        }
-                      }}
-                      onBlur={stopPrivateTyping}
-                      placeholder="Écrivez un message..."
-                      disabled={sendingPrivateImage}
-                      className="flex-1 px-4 py-2 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100"
-                    />
-                    <button
-                      onClick={() => {
-                        stopPrivateTyping();
-                        sendPrivateMessage();
-                      }}
-                      disabled={(!newPrivateMessage.trim() && !privateImageFile) || sendingPrivateImage}
-                      className="p-3 bg-purple-500 text-white rounded-full hover:bg-purple-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                    >
-                      {sendingPrivateImage ? (
-                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                      ) : (
-                        <FaPaperPlane size={16} />
-                      )}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              // Liste des conversations
-              <div className="overflow-y-auto flex-1 scrollbar-purple">
-                {loadingConversations ? (
-                  <div className="flex justify-center py-8">
-                    <div className="w-8 h-8 border-4 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
-                  </div>
-                ) : conversations.length === 0 ? (
-                  <div className="text-center py-12">
-                    <FaEnvelope className="mx-auto mb-3 text-gray-300" size={48} />
-                    <p className="text-gray-500">Aucune conversation</p>
-                    <p className="text-sm text-gray-400 mt-1">Cliquez sur le profil d&apos;un ami pour démarrer une conversation</p>
-                  </div>
-                ) : (
-                  <div className="divide-y divide-gray-100">
-                    {conversations.map((conv) => (
-                      <div
-                        key={conv.odId}
-                        className="group flex items-center hover:bg-gray-50 transition-colors"
-                      >
-                        <button
-                          onClick={() => openConversation({
-                            id: conv.odId,
-                            username: conv.odUsername,
-                            color: conv.odColor,
-                            avatar_url: conv.odAvatar,
-                            last_seen: conv.odLastSeen
-                          })}
-                          className="flex-1 px-4 py-3 flex items-center space-x-3 text-left"
-                        >
-                          <div className="relative">
-                            {conv.odAvatar ? (
-                              <img 
-                                src={conv.odAvatar} 
-                                alt="" 
-                                className="w-12 h-12 rounded-full object-cover border-2"
-                                style={{ borderColor: conv.odColor }}
-                              />
-                            ) : (
-                              <div 
-                                className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold"
-                                style={{ backgroundColor: conv.odColor }}
-                              >
-                                {conv.odUsername[0].toUpperCase()}
-                              </div>
-                            )}
-                            <div className="absolute bottom-0 right-0">
-                              <OnlineStatusIndicator lastSeen={conv.odLastSeen} size="md" showOfflineAsOrange={true} />
-                            </div>
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center justify-between">
-                              <p className="font-semibold truncate" style={{ color: conv.odColor }}>
-                                {conv.odUsername}
-                              </p>
-                              <span className="text-xs text-gray-400">
-                                {new Date(conv.lastMessageTime).toLocaleDateString('fr-FR', { 
-                                  day: '2-digit', 
-                                  month: '2-digit' 
-                                })}
-                              </span>
-                            </div>
-                            {typingInConversations[conv.odId] ? (
-                              <p className="text-sm text-purple-500 italic flex items-center">
-                                <span>est en train d&apos;écrire</span>
-                                <span className="flex ml-1 space-x-0.5">
-                                  <span className="w-1 h-1 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
-                                  <span className="w-1 h-1 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
-                                  <span className="w-1 h-1 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
-                                </span>
-                              </p>
-                            ) : (
-                              <p className="text-sm text-gray-500 truncate">{conv.lastMessage}</p>
-                            )}
-                          </div>
-                          {conv.unreadCount > 0 && (
-                            <span className="bg-purple-500 text-white text-xs w-5 h-5 flex items-center justify-center rounded-full">
-                              {conv.unreadCount}
-                            </span>
-                          )}
-                        </button>
-                        {/* Bouton supprimer - toujours visible */}
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            deleteConversation(conv.odId);
-                          }}
-                          className="mr-2 p-2 text-gray-400 hover:text-red-600 hover:bg-red-100 rounded-full transition-all"
-                          title="Supprimer la conversation"
-                        >
-                          <FaTrash size={14} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+          }
+        }}
+        isMuted={isMuted}
+        microphoneActive={microphoneActive}
+        onToggleMute={toggleMute}
+        onHangupCall={hangupVoiceCall}
+        remoteAudioRef={remoteAudioRef}
+        privateMessagesContainerRef={privateMessagesContainerRef}
+        privateMessagesEndRef={privateMessagesEndRef}
+        loadingPrivateMessages={loadingPrivateMessages}
+        privateMessages={privateMessages}
+        privateTypingUser={privateTypingUser}
+        currentUserId={user?.id}
+        lightboxImageSetter={(imageUrl) => setLightboxImage(imageUrl)}
+        privateImagePreview={privateImagePreview}
+        hasPrivateImage={Boolean(privateImageFile)}
+        onCancelPrivateImage={cancelPrivateImage}
+        privateImageInputRef={privateImageInputRef}
+        onPrivateImageSelect={handlePrivateImageSelect}
+        sendingPrivateImage={sendingPrivateImage}
+        newPrivateMessage={newPrivateMessage}
+        onNewPrivateMessageChange={setNewPrivateMessage}
+        onPrivateTyping={handlePrivateTyping}
+        onStopPrivateTyping={stopPrivateTyping}
+        onSendPrivateMessage={sendPrivateMessage}
+        conversations={conversations}
+        typingInConversations={typingInConversations}
+        loadingConversations={loadingConversations}
+        onOpenConversation={openConversation}
+        onDeleteConversation={deleteConversation}
+      />
       
-      {/* Header avec menu utilisateur */}
-      <header className="bg-white shadow-md border-b border-gray-200 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
-          <div className="flex items-center space-x-4">
-            {/* Menu utilisateur */}
-            <div className="relative" ref={userMenuRef}>
-              <button
-                onClick={() => setShowUserMenu(!showUserMenu)}
-                className="relative flex items-center space-x-3 text-white px-4 py-2 rounded-lg hover:opacity-90 transition-all duration-200 shadow-md hover:shadow-lg"
-                style={{ backgroundColor: user?.color || '#3B82F6' }}
-              >
-                {user?.avatar_url ? (
-                  <div className="relative">
-                    <img 
-                      src={user.avatar_url} 
-                      alt="Avatar"
-                      className="w-8 h-8 rounded-full object-cover border-2 border-white"
-                    />
-                    <div className="absolute bottom-0 right-0">
-                      <OnlineStatusIndicator lastSeen={user?.last_seen} size="sm" className="border-2 border-white" showOfflineAsOrange={true}  />
-                    </div>
-                  </div>
-                ) : (
-                  <div className="relative bg-white rounded-full p-2">
-                    <FaUser style={{ color: user?.color || '#3B82F6' }} size={16} />
-                    <div className="absolute bottom-0 right-0">
-                      <OnlineStatusIndicator lastSeen={user?.last_seen} size="sm" className="border-2 border-white" showOfflineAsOrange={true} />
-                    </div>
-                  </div>
-                )}
-                <span className="font-medium">{user?.name}</span>
-              </button>
-
-              {/* Dropdown menu */}
-              {showUserMenu && (
-                <div className={`absolute left-0 mt-2 w-72 bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden z-50 ${
-                  isClosingMenu ? 'animate-fade-out' : 'animate-fade-in'
-                }`}>
-                  <div className="px-4 py-3 text-white" style={{ backgroundColor: user?.color || '#3B82F6' }}>
-                    <p className="text-sm font-semibold">Informations du compte</p>
-                  </div>
-                  <div className="px-4 py-3 space-y-3">
-                    <div className="flex items-start space-x-3">
-                      <FaUser className="text-blue-500 mt-1 flex-shrink-0" />
-                      <div className="flex-1">
-                        <p className="text-xs text-gray-500 mb-1">Nom d&apos;utilisateur</p>
-                        {!isEditingUsername ? (
-                          <div className="flex items-center space-x-2 group">
-                            <p className="text-sm font-medium text-gray-900">{user?.name}</p>
-                            <button
-                              onClick={startEditingUsername}
-                              className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 text-blue-500 hover:text-blue-600 p-1"
-                              title="Modifier le nom"
-                            >
-                              <FaEdit size={14} />
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="space-y-2">
-                            <input
-                              type="text"
-                              value={editingUsername}
-                              onChange={(e) => setEditingUsername(e.target.value)}
-                              className="w-full px-2 py-1 text-sm border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                              placeholder="Nouveau nom"
-                              autoFocus
-                              disabled={isUpdatingUsername}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') handleUpdateUsername();
-                                if (e.key === 'Escape') cancelEditingUsername();
-                              }}
-                            />
-                            <div className="flex space-x-2">
-                              <button
-                                onClick={handleUpdateUsername}
-                                disabled={isUpdatingUsername}
-                                className="flex-1 px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 transition-colors duration-200 flex items-center justify-center space-x-1 disabled:bg-blue-400"
-                              >
-                                <FaCheck size={10} />
-                                <span>{isUpdatingUsername ? 'Enregistrement...' : 'Valider'}</span>
-                              </button>
-                              <button
-                                onClick={cancelEditingUsername}
-                                disabled={isUpdatingUsername}
-                                className="flex-1 px-2 py-1 bg-gray-200 text-gray-700 rounded text-xs hover:bg-gray-300 transition-colors duration-200 flex items-center justify-center space-x-1 disabled:opacity-50"
-                              >
-                                <FaTimes size={10} />
-                                <span>Annuler</span>
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Sélecteur de couleur */}
-                    <div className="flex items-start space-x-3 pt-3 border-t border-gray-100">
-                      <div className="mt-1 flex-shrink-0">
-                        <div 
-                          className="w-5 h-5 rounded-full border-2 border-gray-300"
-                          style={{ backgroundColor: user?.color || '#3B82F6' }}
-                        />
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-xs text-gray-500 mb-1">Couleur</p>
-                        {!isEditingColor ? (
-                          <div className="flex items-center space-x-2 group">
-                            <p className="text-sm font-medium text-gray-900">{user?.color || '#3B82F6'}</p>
-                            <button
-                              onClick={startEditingColor}
-                              className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 text-blue-500 hover:text-blue-600 p-1"
-                              title="Modifier la couleur"
-                            >
-                              <FaEdit size={14} />
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="space-y-2">
-                            <div className="flex items-center space-x-2">
-                              <input
-                                type="color"
-                                value={editingColor}
-                                onChange={(e) => setEditingColor(e.target.value)}
-                                className="w-12 h-8 rounded border border-gray-300 cursor-pointer"
-                                disabled={isUpdatingColor}
-                              />
-                              <input
-                                type="text"
-                                value={editingColor}
-                                onChange={(e) => setEditingColor(e.target.value)}
-                                className="flex-1 px-2 py-1 text-sm border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                placeholder="#3B82F6"
-                                disabled={isUpdatingColor}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') handleUpdateColor();
-                                  if (e.key === 'Escape') cancelEditingColor();
-                                }}
-                              />
-                            </div>
-                            <div className="flex space-x-2">
-                              <button
-                                onClick={handleUpdateColor}
-                                disabled={isUpdatingColor}
-                                className="flex-1 px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 transition-colors duration-200 flex items-center justify-center space-x-1 disabled:bg-blue-400"
-                              >
-                                <FaCheck size={10} />
-                                <span>{isUpdatingColor ? 'Enregistrement...' : 'Valider'}</span>
-                              </button>
-                              <button
-                                onClick={cancelEditingColor}
-                                disabled={isUpdatingColor}
-                                className="flex-1 px-2 py-1 bg-gray-200 text-gray-700 rounded text-xs hover:bg-gray-300 transition-colors duration-200 flex items-center justify-center space-x-1 disabled:opacity-50"
-                              >
-                                <FaTimes size={10} />
-                                <span>Annuler</span>
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Photo de profil */}
-                    <div className="flex items-start space-x-3 pt-3 border-t border-gray-100">
-                      <FaCamera className="text-purple-500 mt-1 flex-shrink-0" />
-                      <div className="flex-1">
-                        <p className="text-xs text-gray-500 mb-2">Photo de profil</p>
-                        <div className="flex items-center space-x-3">
-                          {user?.avatar_url ? (
-                            <img 
-                              src={user.avatar_url} 
-                              alt="Avatar"
-                              className="w-12 h-12 rounded-full object-cover border-2 border-gray-200"
-                            />
-                          ) : (
-                            <div 
-                              className="w-12 h-12 rounded-full flex items-center justify-center"
-                              style={{ backgroundColor: user?.color || '#3B82F6' }}
-                            >
-                              <FaUser className="text-white" size={20} />
-                            </div>
-                          )}
-                          <label className={`px-3 py-1.5 bg-purple-600 text-white rounded text-xs hover:bg-purple-700 transition-colors duration-200 cursor-pointer flex items-center space-x-1 ${isUploadingAvatar ? 'opacity-50 cursor-not-allowed' : ''}`}>
-                            <FaCamera size={10} />
-                            <span>{isUploadingAvatar ? 'Upload...' : 'Changer'}</span>
-                            <input
-                              ref={avatarInputRef}
-                              type="file"
-                              accept="image/*"
-                              onChange={handleAvatarUpload}
-                              className="hidden"
-                              disabled={isUploadingAvatar}
-                            />
-                          </label>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Biographie */}
-                    <div className="flex items-start space-x-3 pt-3 border-t border-gray-100">
-                      <FaEdit className="text-blue-500 mt-1 flex-shrink-0" />
-                      <div className="flex-1">
-                        <p className="text-xs text-gray-500 mb-1">Biographie</p>
-                        {!isEditingBio ? (
-                          <div className="flex items-center space-x-2 group">
-                            <p className="text-sm font-medium text-gray-900">
-                              {user?.bio || <span className="italic font-normal text-gray-400">Aucune bio</span>}
-                            </p>
-                            <button
-                              onClick={startEditingBio}
-                              className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 text-blue-500 hover:text-blue-600 p-1"
-                              title="Modifier la bio"
-                            >
-                              <FaEdit size={14} />
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="space-y-2">
-                            <textarea
-                              value={editingBio}
-                              onChange={(e) => setEditingBio(e.target.value)}
-                              className="w-full px-2 py-1 text-sm border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-                              placeholder="Décrivez-vous en quelques mots..."
-                              rows={2}
-                              maxLength={200}
-                              disabled={isUpdatingBio}
-                              autoFocus
-                              onKeyDown={(e) => {
-                                if (e.key === 'Escape') cancelEditingBio();
-                              }}
-                            />
-                            <div className="flex space-x-2">
-                              <button
-                                onClick={handleUpdateBio}
-                                disabled={isUpdatingBio}
-                                className="flex-1 px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 transition-colors duration-200 flex items-center justify-center space-x-1 disabled:bg-blue-400"
-                              >
-                                <FaCheck size={10} />
-                                <span>{isUpdatingBio ? 'Enregistrement...' : 'Valider'}</span>
-                              </button>
-                              <button
-                                onClick={cancelEditingBio}
-                                disabled={isUpdatingBio}
-                                className="flex-1 px-2 py-1 bg-gray-200 text-gray-700 rounded text-xs hover:bg-gray-300 transition-colors duration-200 flex items-center justify-center space-x-1 disabled:opacity-50"
-                              >
-                                <FaTimes size={10} />
-                                <span>Annuler</span>
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="border-t border-gray-100">
-                    <button
-                      onClick={handleLogout}
-                      className="w-full px-4 py-3 text-left text-red-600 hover:bg-red-50 transition-colors duration-200 flex items-center space-x-2"
-                    >
-                      <FaSignOutAlt />
-                      <span className="font-medium">Déconnexion</span>
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Bouton Mes amis */}
-            <button
-              onClick={() => {
-                setShowFriendsModal(true);
-                loadFriends();
-              }}
-              className="relative flex items-center space-x-2 px-4 py-2 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-all duration-200 shadow-sm hover:shadow"
-            >
-              <FaUserFriends className="text-blue-500" size={18} />
-              <span className="font-medium text-gray-700 hidden sm:inline">Amis</span>
-              {friendRequests.length > 0 && (
-                <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs w-5 h-5 flex items-center justify-center rounded-full animate-pulse">
-                  {friendRequests.length}
-                </span>
-              )}
-            </button>
-
-            {/* Bouton Messages privés */}
-            <button
-              onClick={openMessagesModal}
-              className="relative flex items-center space-x-2 px-4 py-2 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-all duration-200 shadow-sm hover:shadow"
-            >
-              <FaEnvelope className="text-purple-500" size={18} />
-              <span className="font-medium text-gray-700 hidden sm:inline">Messages</span>
-              {unreadMessagesCount > 0 && (
-                <span className="absolute -top-2 -right-2 bg-purple-500 text-white text-xs w-5 h-5 flex items-center justify-center rounded-full animate-pulse">
-                  {unreadMessagesCount > 9 ? '9+' : unreadMessagesCount}
-                </span>
-              )}
-            </button>
-
-            {/* Bouton Utilisateurs en ligne */}
-            <button
-              onClick={() => {
-                setShowOnlineUsersModal(true);
-                loadOnlineUsers();
-              }}
-              className="relative flex items-center space-x-2 px-4 py-2 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-all duration-200 shadow-sm hover:shadow"
-            >
-              <FaUsers className="text-green-500" size={18} />
-              <span className="font-medium text-gray-700 hidden sm:inline">En ligne</span>
-              <span className={`absolute -top-2 -right-2 bg-green-500 text-white text-xs w-5 h-5 flex items-center justify-center rounded-full transition-all duration-5000 ${onlineUsers.length > 0 ? 'opacity-100 scale-100' : 'opacity-0 scale-0'}`}>
-                <CountUp key={onlineUsers.length} end={onlineUsers.length} duration={0.5} />
-              </span>
-            </button>
-          </div>
-          
-          <h1 className="text-xl font-bold text-gray-800 hidden sm:block">
-            💬 ChatFlow
-          </h1>
-        </div>
-      </header>
+      <HeaderBar
+        user={user}
+        showUserMenu={showUserMenu}
+        isClosingMenu={isClosingMenu}
+        userMenuRef={userMenuRef}
+        onToggleUserMenu={() => setShowUserMenu(!showUserMenu)}
+        isEditingUsername={isEditingUsername}
+        editingUsername={editingUsername}
+        onEditingUsernameChange={setEditingUsername}
+        isUpdatingUsername={isUpdatingUsername}
+        onStartEditingUsername={startEditingUsername}
+        onUpdateUsername={handleUpdateUsername}
+        onCancelEditingUsername={cancelEditingUsername}
+        isEditingColor={isEditingColor}
+        editingColor={editingColor}
+        onEditingColorChange={setEditingColor}
+        isUpdatingColor={isUpdatingColor}
+        onStartEditingColor={startEditingColor}
+        onUpdateColor={handleUpdateColor}
+        onCancelEditingColor={cancelEditingColor}
+        avatarInputRef={avatarInputRef}
+        onAvatarUpload={handleAvatarUpload}
+        isUploadingAvatar={isUploadingAvatar}
+        isEditingBio={isEditingBio}
+        editingBio={editingBio}
+        onEditingBioChange={setEditingBio}
+        isUpdatingBio={isUpdatingBio}
+        onStartEditingBio={startEditingBio}
+        onUpdateBio={handleUpdateBio}
+        onCancelEditingBio={cancelEditingBio}
+        onLogout={handleLogout}
+        onOpenFriends={() => {
+          setShowFriendsModal(true);
+          loadFriends();
+        }}
+        friendRequestsCount={friendRequests.length}
+        onOpenMessages={openMessagesModal}
+        unreadMessagesCount={unreadMessagesCount}
+        onOpenOnlineUsers={() => {
+          setShowOnlineUsersModal(true);
+          loadOnlineUsers();
+        }}
+        onlineUsersCount={onlineUsers.length}
+      />
 
       {/* Contenu principal */}
       <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -4362,351 +3260,50 @@ useEffect(() => {
           </div>
         )}
 
-        {/* Formulaire de nouveau message */}
-        <div className="bg-white rounded-2xl shadow-lg p-6 mb-8 border border-gray-100">
-          <h2 className="text-lg font-semibold text-gray-800 mb-4 flex items-center space-x-2">
-            <span>✍️</span>
-            <span>Nouveau message</span>
-          </h2>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="relative">
-              <textarea
-                ref={textareaRef}
-                value={newMessage}
-                onChange={(e) => {
-                  setNewMessage(e.target.value);
-                  handleTyping();
-                }}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 resize-none"
-                placeholder="Écrivez votre message..."
-                rows={3}
-                required={!imageFile}
-              />
-              
-              {/* Prévisualisation de l'image */}
-              {imagePreview && (
-                <div className="mt-3 relative inline-block">
-                  <img 
-                    src={imagePreview} 
-                    alt="Preview" 
-                    className="max-w-xs max-h-48 rounded-lg border-2 border-gray-300"
-                  />
-                  <button
-                    type="button"
-                    onClick={removeImage}
-                    className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 transition-colors"
-                  >
-                    <FaTimes size={12} />
-                  </button>
-                </div>
-              )}
-            </div>
+        <MessageComposer
+          newMessage={newMessage}
+          onNewMessageChange={setNewMessage}
+          onTyping={handleTyping}
+          onSubmit={handleSubmit}
+          textareaRef={textareaRef}
+          imagePreview={imagePreview}
+          onRemoveImage={removeImage}
+          showEmojiPicker={showEmojiPicker}
+          onToggleEmojiPicker={() => setShowEmojiPicker(!showEmojiPicker)}
+          onEmojiSelect={handleEmojiSelect}
+          emojiPickerRef={emojiPickerRef}
+          onImageSelect={handleImageSelect}
+          imageRequired={!imageFile}
+        />
 
-            {/* Boutons emoji et image */}
-            <div className="flex items-center space-x-2">
-              <div className="relative" ref={emojiPickerRef}>
-                <button
-                  type="button"
-                  onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-                  className="p-2 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 transition-all duration-200"
-                  title="Ajouter un emoji"
-                >
-                  <FaSmile size={20} />
-                </button>
+        <TypingIndicator usersTyping={usersTyping} />
 
-                {/* Sélecteur d'emoji */}
-                {showEmojiPicker && (
-                  <div className="absolute bottom-full left-0 mb-2 bg-white rounded-xl shadow-2xl border border-gray-200 p-4 z-50 w-80 max-h-64 overflow-y-auto animate-fade-in">
-                    <p className="text-xs font-semibold text-gray-500 mb-2">Emojis populaires</p>
-                    <div className="grid grid-cols-8 gap-2">
-                      {['😀', '😂', '🤣', '😊', '😍', '🥰', '😎', '🤔', '😮', '😢', '😭', '😡', '👍', '👎', '👏', '🙏', '💪', '🎉', '🎊', '🎈', '❤️', '💙', '💚', '💛', '🔥', '⭐', '✨', '💯', '🚀', '🎯', '💡', '🎨'].map((emoji) => (
-                        <button
-                          key={emoji}
-                          type="button"
-                          onClick={() => handleEmojiSelect(emoji)}
-                          className="text-2xl hover:bg-gray-100 rounded p-1 transition-colors"
-                        >
-                          {emoji}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <label className="p-2 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 transition-all duration-200 cursor-pointer">
-                <FaImage size={20} />
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleImageSelect}
-                  className="hidden"
-                />
-              </label>
-
-              <button
-                type="submit"
-                className="flex-1 bg-blue-600 text-white py-3 px-6 rounded-lg hover:bg-blue-700 transition-all duration-200 font-medium shadow-md hover:shadow-lg"
-              >
-                Envoyer le message
-              </button>
-            </div>
-          </form>
-        </div>
-
-        {/* ✅ Indicateur "typing..." */}
-        {Object.keys(usersTyping).length > 0 && (
-          <div className="bg-blue-50 border-l-4 border-blue-500 p-4 mb-6 rounded-r-lg animate-fade-in">
-            <p className="text-blue-700 text-sm flex items-center space-x-2">
-              <span className="inline-flex space-x-1">
-                <span className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
-                <span className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
-                <span className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
-              </span>
-              <span className="font-medium">
-                {Object.values(usersTyping).join(', ')} {Object.keys(usersTyping).length > 1 ? 'sont en train d\'écrire' : 'est en train d\'écrire'}...
-              </span>
-            </p>
-          </div>
-        )}
-
-        {/* Liste des messages */}
-        <div className="space-y-4">
-          <h2 className="text-2xl font-bold text-gray-800 mb-6">💬 Messages</h2>
-          {loadingMessages ? (
-            // Skeleton loader
-            <div className="space-y-4">
-              {[...Array(3)].map((_, idx) => (
-                <div key={`skeleton-${idx}`} className="bg-white p-6 rounded-2xl shadow-md animate-pulse">
-                  <div className="h-5 bg-gray-200 rounded-lg w-3/4 mb-3"></div>
-                  <div className="h-4 bg-gray-200 rounded-lg w-1/2"></div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {messages.map((item, index) => (
-                <div 
-                  key={`message-${item.id}`} 
-                  className="bg-white p-6 rounded-2xl shadow-md hover:shadow-xl transition-all duration-500 ease-out border-l-4"
-                  style={{ 
-                    opacity: 0,
-                    animation: `fadeInUp 0.5s ease-out ${index * 50}ms forwards`,
-                    borderLeftColor: item.user_color || '#3B82F6'
-                  }}
-                >
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div className="flex-1">
-                      <div 
-                        className="flex items-center space-x-3 mb-2 cursor-pointer group"
-                        onClick={() => handleViewProfile(item.user_id)}
-                      >
-                        <div className="relative">
-                          {item.avatar_url ? (
-                            <img 
-                              src={item.avatar_url} 
-                              alt="Avatar"
-                              className="w-10 h-10 rounded-full object-cover border-2 group-hover:scale-110 transition-transform"
-                              style={{ borderColor: item.user_color || '#3B82F6' }}
-                            />
-                          ) : (
-                            <div 
-                              className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm group-hover:scale-110 transition-transform"
-                              style={{ backgroundColor: item.user_color || '#3B82F6' }}
-                            >
-                              {(item.username || 'U')[0].toUpperCase()}
-                            </div>
-                          )}
-                          <div className="absolute bottom-0 right-0">
-                            <OnlineStatusIndicator lastSeen={item.last_seen} size="sm" showOfflineAsOrange={true} />
-                          </div>
-                        </div>
-                        <p className="font-semibold group-hover:underline" style={{ color: item.user_color || '#3B82F6' }}>
-                          {item.username || 'Utilisateur'}
-                        </p>
-                      </div>
-                      
-                      {/* Message texte */}
-                      {editingMessageId === item.id ? (
-                        <div className="space-y-2 mb-2">
-                          <textarea
-                            value={editingMessageText}
-                            onChange={(e) => setEditingMessageText(e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
-                            rows={3}
-                          />
-                          <div className="flex space-x-2">
-                            <button
-                              onClick={() => handleUpdateMessage(item.id)}
-                              className="flex-1 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200 flex items-center justify-center space-x-2"
-                            >
-                              <FaCheck size={14} />
-                              <span>Enregistrer</span>
-                            </button>
-                            <button
-                              onClick={handleCancelEditMessage}
-                              className="flex-1 px-3 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors duration-200 flex items-center justify-center space-x-2"
-                            >
-                              <FaTimes size={14} />
-                              <span>Annuler</span>
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        item.message && (
-                          <p className="text-gray-800 leading-relaxed mb-2">
-                            {item.message}
-                            {item.edited && (
-                              <span className="text-xs text-gray-500 ml-2">(modifié)</span>
-                            )}
-                          </p>
-                        )
-                      )}
-                      
-                      {/* Image si présente */}
-                      {item.image_url && (
-                        <div className="mt-2">
-                          <img 
-                            src={item.image_url} 
-                            alt="Message image" 
-                            className="max-w-md rounded-lg border border-gray-200 cursor-zoom-in hover:opacity-90 transition-opacity"
-                            onClick={() => setLightboxImage(item.image_url!)}
-                          />
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex items-center space-x-2 self-end sm:self-center">
-                      <button
-                        onClick={() => handleLike(item.id, item.liked)}
-                        className={`p-2 rounded-lg transition-all duration-200 ${
-                          item.liked 
-                            ? 'bg-red-100 text-red-600 hover:bg-red-200' 
-                            : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
-                        }`}
-                        title="J'aime"
-                      >
-                        {item.liked ? <FaHeart size={18} /> : <FaRegHeart size={18} />}
-                      </button>
-
-                      <button
-                        onClick={() => handleComment(item.id)}
-                        className={`p-2 rounded-lg transition-all duration-200 ${
-                          commentingMessageId === item.id
-                            ? 'bg-blue-100 text-blue-600'
-                            : 'bg-gray-100 text-gray-600 hover:bg-blue-50'
-                        }`}
-                        title="Commentaires"
-                      >
-                        <FaArrowRight size={18} className={commentingMessageId === item.id ? 'rotate-90 transition-transform duration-200' : 'transition-transform duration-200'} />
-                      </button>
-
-                      {item.user_id === user?.id && (
-                        <>
-                          <button
-                            onClick={() => handleStartEditMessage(item)}
-                            className="p-2 rounded-lg bg-gray-100 text-gray-600 hover:bg-yellow-100 hover:text-yellow-700 transition-all duration-200"
-                            title="Modifier"
-                          >
-                            <FaEdit size={16} />
-                          </button>
-
-                          <button
-                            onClick={() => handleDelete(item.id)}
-                            className="p-2 rounded-lg bg-gray-100 text-gray-600 hover:bg-red-100 hover:text-red-600 transition-all duration-200"
-                            title="Supprimer"
-                          >
-                            <FaTrash size={16} />
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-
-                  {(commentingMessageId === item.id || closingMessageId === item.id) && (
-                    <div className={`mt-6 pt-6 border-t border-gray-200 ${closingMessageId === item.id ? 'animate-fade-out' : 'animate-fade-in'}`}>
-                      {loadingComments[item.id] ? (
-                        <p className="text-gray-400 text-sm mb-4 animate-pulse flex items-center space-x-2">
-                          <span>💬</span>
-                          <span>Chargement des commentaires...</span>
-                        </p>
-                      ) : (
-                        <div className="space-y-3 mb-4">
-                          {(commentairesByMessage[item.id] || []).length > 0 ? (
-                            (commentairesByMessage[item.id] || []).map((commentaire, idx) => (
-                              <div 
-                                key={`comment-${commentaire.id}`} 
-                                className="bg-gray-50 p-4 rounded-lg transition-all duration-300 ease-out border-l-4"
-                                style={{
-                                  opacity: 0,
-                                  animation: `fadeInUp 0.4s ease-out ${idx * 80}ms forwards`,
-                                  borderLeftColor: commentaire.user_color || '#10B981'
-                                }}
-                              >
-                                <div 
-                                  className="flex items-center space-x-2 mb-1 cursor-pointer group"
-                                  onClick={() => handleViewProfile(commentaire.user_id)}
-                                >
-                                  {commentaire.avatar_url ? (
-                                    <img 
-                                      src={commentaire.avatar_url} 
-                                      alt="Avatar"
-                                      className="w-7 h-7 rounded-full object-cover border-2 group-hover:scale-110 transition-transform"
-                                      style={{ borderColor: commentaire.user_color || '#10B981' }}
-                                    />
-                                  ) : (
-                                    <div 
-                                      className="w-7 h-7 rounded-full flex items-center justify-center text-white font-bold text-xs group-hover:scale-110 transition-transform"
-                                      style={{ backgroundColor: commentaire.user_color || '#10B981' }}
-                                    >
-                                      {(commentaire.username || 'U')[0].toUpperCase()}
-                                    </div>
-                                  )}
-                                  <p 
-                                    className="font-semibold text-sm group-hover:underline"
-                                    style={{ color: commentaire.user_color || '#10B981' }}
-                                  >
-                                    {commentaire.username || 'Utilisateur'}
-                                  </p>
-                                </div>
-                                <p className="text-gray-700 ml-9">{commentaire.commentaire}</p>
-                              </div>
-                            ))
-                          ) : (
-                            <p className="text-gray-400 text-sm italic">Aucun commentaire pour le moment</p>
-                          )}
-                        </div>
-                      )}
-
-                      <form onSubmit={(e) => handleCommentSubmit(e, item.id)} className="space-y-3">
-                        <input
-                          type="text"
-                          value={newComment}
-                          onChange={(e) => setNewComment(e.target.value)}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all duration-200"
-                          placeholder="💬 Ajouter un commentaire..."
-                          required
-                        />
-                        <button
-                          type="submit"
-                          className="w-full bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 transition-all duration-200 font-medium shadow-md hover:shadow-lg"
-                        >
-                          Publier le commentaire
-                        </button>
-                      </form>
-                    </div>
-                  )}
-                  {/* Référence de scroll des commentaires supprimée */}
-                </div>
-              ))}
-              {/* Référence de scroll des messages publics supprimée */}
-            </div>
-          )}
-        </div>
+        <MessageList
+          loadingMessages={loadingMessages}
+          messages={messages}
+          onViewProfile={handleViewProfile}
+          editingMessageId={editingMessageId}
+          editingMessageText={editingMessageText}
+          onEditingMessageTextChange={setEditingMessageText}
+          onUpdateMessage={handleUpdateMessage}
+          onCancelEditMessage={handleCancelEditMessage}
+          onStartEditMessage={handleStartEditMessage}
+          onDeleteMessage={handleDelete}
+          onLike={handleLike}
+          onToggleComments={handleComment}
+          commentingMessageId={commentingMessageId}
+          closingMessageId={closingMessageId}
+          loadingComments={loadingComments}
+          commentairesByMessage={commentairesByMessage}
+          newComment={newComment}
+          onNewCommentChange={setNewComment}
+          onSubmitComment={handleCommentSubmit}
+          currentUser={user}
+          lightboxImageSetter={(imageUrl) => setLightboxImage(imageUrl)}
+        />
       </main>
     </div>
   );
 };
 
 export default Page;
-
-
